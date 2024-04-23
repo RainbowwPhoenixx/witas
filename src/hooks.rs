@@ -19,7 +19,7 @@ use std::ffi::CStr;
 /// );
 /// ```
 macro_rules! init_hook {
-    ( $( $hook: ident @ $target_addr: literal -> $detour: ident ),* ) => {
+    ( $( $hook: ident @ $target_addr: literal -> $detour: ident ),* $(,)? ) => {
         {
             let mut succeed = true;
             $(
@@ -37,7 +37,7 @@ macro_rules! init_hook {
 }
 
 macro_rules! enable_hook {
-    ( $( $hook: ident ),* ) => {
+    ( $( $hook: ident ),* $(,)? ) => {
         {
             let mut succeed = true;
             $(
@@ -55,7 +55,7 @@ macro_rules! enable_hook {
 }
 
 macro_rules! disable_hook {
-    ( $( $hook: ident),* ) => {
+    ( $( $hook: ident),* $(,)? ) => {
         {
             let mut succeed = true;
             $(
@@ -124,11 +124,11 @@ pub fn init_hooks() {
 
     // Init the hooks
     let success = init_hook!(
-        MainLoopStart @ 0x1401e5120 -> main_loop_begin
-        ,GetInput      @ 0x140346110 -> get_input
-        ,HandleMessage @ 0x140345bc0 -> handle_message
-        ,DeclareConsoleCommands @ 0x140071b20 -> declare_console_commands
-        ,DeclareConsoleCommand  @ 0x1402f58b0 -> declare_console_command
+        MainLoopStart @ 0x1401e5120 -> main_loop_begin,
+        GetInput      @ 0x140346110 -> get_input,
+        HandleMessage @ 0x140345bc0 -> handle_message,
+        DeclareConsoleCommands @ 0x140071b20 -> declare_console_commands,
+        DeclareConsoleCommand  @ 0x1402f58b0 -> declare_console_command,
         // ,HandleKeyboardInput    @ 0x140344a60 -> handle_keyboard_input
     );
 
@@ -144,7 +144,7 @@ pub fn enable_hooks() {
         GetInput,
         HandleMessage,
         DeclareConsoleCommands,
-        DeclareConsoleCommand
+        DeclareConsoleCommand,
         // HandleKeyboardInput
     );
 
@@ -160,7 +160,7 @@ pub fn disable_hooks() {
         GetInput,
         HandleMessage,
         DeclareConsoleCommands,
-        DeclareConsoleCommand
+        DeclareConsoleCommand,
         // HandleKeyboardInput
     );
 
