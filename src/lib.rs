@@ -1,6 +1,8 @@
 use tracing::info;
 
 mod hooks;
+mod script;
+mod tas_player;
 
 #[ctor::ctor]
 fn main() {
@@ -21,6 +23,7 @@ fn setup() {
         .with_max_level(tracing::Level::DEBUG)
         .with_ansi(false)
         .with_writer(non_blocking)
+        .with_target(false)
         .init();
 
     // If we don't do this, the logger dies at the end of this thread.
