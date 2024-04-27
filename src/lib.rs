@@ -1,14 +1,15 @@
+use core::time;
+
 use tracing::info;
 
 mod hooks;
 mod script;
 mod tas_player;
+mod windows_input;
 
 #[ctor::ctor]
 fn main() {
-    let info = std::env::args().next_back();
-
-    if let Some(arg) = info {
+    if let Some(arg) = std::env::args().next_back() {
         if arg == "witness64_d3d11.exe" {
             std::thread::spawn(|| setup());
         }
@@ -16,6 +17,8 @@ fn main() {
 }
 
 fn setup() {
+    std::thread::sleep(time::Duration::from_secs(1));
+
     let file_appender = tracing_appender::rolling::never(".", format!("witness_tas.log"));
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
