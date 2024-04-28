@@ -9,7 +9,7 @@ mod windows_input;
 
 #[ctor::ctor]
 fn main() {
-    if let Some(arg) = std::env::args().next_back() {
+    if let Some(arg) = std::env::args().nth(1) {
         if arg == "witness64_d3d11.exe" {
             std::thread::spawn(|| setup());
         }

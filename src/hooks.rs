@@ -110,18 +110,20 @@ impl<'a, T: Copy> PointerChain<'a, T> {
 #[repr(C)]
 enum KeyCode {
     // Movement keys
-    Z = 0x5A,
-    Q = 0x51,
+    W = 0x57,
+    A = 0x41,
     S = 0x53,
     D = 0x44,
+    _Z = 0x5A,
+    _Q = 0x51,
     LShift = 0xA0,
 
     // Mouse
-    LButton = 0x01,
-    RButton = 0x02,
+    _LButton = 0x01,
+    _RButton = 0x02,
 
     // Puzzle toggle
-    Space = 0x20,
+    _Space = 0x20,
 
     // Play tas
     T = 0x54,
@@ -143,12 +145,16 @@ static_detour! {
     // Used by the game to check key presses
     static IsKeyPressed: unsafe extern "win64" fn(usize, u32) -> u32;
     static GetMouseDeltaPos: unsafe extern "win64" fn(usize, *mut i32,  *mut i32,  *mut i32, bool);
+
+    // Idk
+    pub static DoRestartMaybe: unsafe extern "win64" fn();
 }
 
 static mut INPUT_STUFF_PTR: Option<usize> = None;
 static mut HANDLE_MSG_PARAM1: Option<usize> = None;
 // static MOUSE_COORDS_FROM_SCREEN_CENTER: PointerChain<(i32, i32)> = PointerChain::new(&[0x14469a060, 0x0, 0x9c]);
 pub static MAIN_LOOP_COUNT: PointerChain<u32> = PointerChain::new(&[0x14062d5c8]);
+pub static NEW_GAME_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d076]);
 
 // ------------------------------------------------------------------------------------
 //                                 OUR OVERRIDES
@@ -164,10 +170,10 @@ fn execute_tas_inputs() {
                 // Movement
                 match (controller.current.forward, controller.previous.forward) {
                     (true, false) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::Z as u32, 0)
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::W as u32, 0)
                     }
                     (false, true) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::Z as u32, 0)
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::W as u32, 0)
                     }
                     _ => 0,
                 };
@@ -182,10 +188,10 @@ fn execute_tas_inputs() {
                 };
                 match (controller.current.left, controller.previous.left) {
                     (true, false) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::Q as u32, 0)
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::A as u32, 0)
                     }
                     (false, true) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::Q as u32, 0)
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::A as u32, 0)
                     }
                     _ => 0,
                 };
@@ -245,7 +251,8 @@ fn execute_tas_inputs() {
                             message: Message::WM_LBUTTONUP as u32,
                             ..msg_template
                         };
-                        HandleMessage.call(handle_message_this, addr_of!(msg))}
+                        HandleMessage.call(handle_message_this, addr_of!(msg))
+                    }
                     _ => 0,
                 };
                 match (
@@ -264,7 +271,8 @@ fn execute_tas_inputs() {
                             message: Message::WM_RBUTTONUP as u32,
                             ..msg_template
                         };
-                        HandleMessage.call(handle_message_this, addr_of!(msg))}
+                        HandleMessage.call(handle_message_this, addr_of!(msg))
+                    }
                     _ => 0,
                 };
             }
@@ -288,7 +296,6 @@ fn handle_message(this: usize, message: *const MSG) -> u64 {
     unsafe { HANDLE_MSG_PARAM1 = Some(this) };
 
     let val = unsafe { *message }.message;
-    let full_msg = unsafe {*message};
 
     match Message::try_from(val) {
         Ok(msg) => match msg {
@@ -299,8 +306,8 @@ fn handle_message(this: usize, message: *const MSG) -> u64 {
             Message::WM_DEADCHAR => return 0,
             Message::WM_SYSKEYDOWN => {}
             Message::WM_SYSKEYUP => return 0,
-            Message::WM_MOUSEMOVE => {},
-            Message::WM_LBUTTONDOWN => {},
+            Message::WM_MOUSEMOVE => {}
+            Message::WM_LBUTTONDOWN => {}
             Message::WM_LBUTTONUP => {}
             Message::WM_LBUTTONDLBCLK => {}
             Message::WM_RBUTTONDOWN => {}
@@ -348,7 +355,7 @@ fn handle_keyboard_input(
 
             match tas_player.as_mut() {
                 Some(player) => player.start(),
-                None => {},
+                None => {}
             }
         }
     }
@@ -420,6 +427,12 @@ pub fn init_hooks() {
     }
     debug!("Done. Starting to initialise hooks.");
 
+    // Placeholder function for functions we want to call without hooking
+    fn placeholder() {
+        error!("This function is not supposed to be hooked.");
+        unreachable!()
+    }
+
     // Init the hooks
     let success = init_hook!(
         // MainLoopStart          @ 0x1401e5120 -> main_loop_begin,
@@ -431,6 +444,7 @@ pub fn init_hooks() {
         HandleKeyboardInput    @ 0x140344a60 -> handle_keyboard_input,
         IsKeyPressed           @ 0x1403448e0 -> is_key_pressed,
         GetMouseDeltaPos       @ 0x1403448f0 -> get_mouse_delta_pos,
+        DoRestartMaybe         @ 0x1401f9e60 -> placeholder,
     );
 
     if !success {

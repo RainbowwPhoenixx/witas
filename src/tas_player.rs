@@ -1,8 +1,11 @@
 use std::sync::Mutex;
 
-use crate::{hooks::MAIN_LOOP_COUNT, script};
+use crate::{
+    hooks::{DoRestartMaybe, MAIN_LOOP_COUNT, NEW_GAME_FLAG},
+    script::{self, Script, StartType},
+};
 use chumsky::Parser as _;
-use tracing::{debug, error};
+use tracing::error;
 
 pub static mut TAS_PLAYER: Mutex<Option<TasPlayer>> = Mutex::new(None);
 
@@ -43,23 +46,29 @@ impl TasPlayer {
                 error!("{err}");
                 None
             }
-            Ok(src) => match script::parser().parse(src) {
+            Ok(src) => match Script::get_parser().parse(src) {
                 Err(parse_errs) => {
                     parse_errs
                         .into_iter()
-                        .for_each(|e| error!("Parse error: {}", e));
+                        .for_each(|e| error!("Parse error: {e}"));
                     None
                 }
-                Ok(script) => {
+                Ok(mut script) => {
                     // debug!("{script:#?}");
-                    Some(Self {
-                        playing: false,
-                        start_tick: 0,
-                        current_tick: 0,
-                        next_line: 0,
-                        script,
-                        controller: Default::default(),
-                    })
+                    match script.pre_process() {
+                        Ok(_) => Some(Self {
+                            playing: false,
+                            start_tick: 0,
+                            current_tick: 0,
+                            next_line: 0,
+                            script,
+                            controller: Default::default(),
+                        }),
+                        Err(err) => {
+                            error!("Parse error: {err}");
+                            None
+                        }
+                    }
                 }
             },
         }
@@ -67,6 +76,19 @@ impl TasPlayer {
 
     /// Starts the TAS
     pub fn start(&mut self) {
+        match self.script.start {
+            StartType::Now => {}
+            StartType::NewGame => unsafe {
+                // These actions are lifted from the function in the witness
+                //  that handle the menu for new game
+                NEW_GAME_FLAG.write(true);
+                DoRestartMaybe.call();
+            },
+            StartType::Save(_) => {
+                error!("Starting from a save is not implemented yet. Starting now instead.")
+            }
+        }
+
         self.start_tick = unsafe { MAIN_LOOP_COUNT.read() };
         self.current_tick = 0;
         self.playing = true;
@@ -108,7 +130,7 @@ impl TasPlayer {
 
             if next_line.tick == current_tick {
                 self.next_line += 1;
-    
+
                 for key in &next_line.keys {
                     match key {
                         // Movement
@@ -120,15 +142,15 @@ impl TasPlayer {
                         'd' => self.controller.current.backward = false,
                         'R' => self.controller.current.right = true,
                         'r' => self.controller.current.right = false,
-    
+
                         // Sprint
                         'S' => self.controller.current.running = true,
                         's' => self.controller.current.running = false,
-    
+
                         // Toggle puzzle
                         'P' => self.controller.current.left_click = true,
                         'p' => self.controller.current.right_click = true,
-    
+
                         _ => {}
                     }
                 }

@@ -19,9 +19,11 @@
 
 ## Todo
 - Document the script format
-- Extend script format
 - Test consistency
 - Automatically release buttons at the end
+- Handle resolution:
+    - Make mouse movement independent of res?
+    - Make res a parameter of the script?
 
 # Contributing
 The project is open to contributions. TODO: brief explanation of how it works.
