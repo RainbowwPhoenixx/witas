@@ -1,42 +1,38 @@
 use std::sync::Mutex;
 
-use crate::script;
+use crate::{hooks::MAIN_LOOP_COUNT, script};
 use chumsky::Parser as _;
-use tracing::{error, debug};
-
+use tracing::{debug, error};
 
 pub static mut TAS_PLAYER: Mutex<Option<TasPlayer>> = Mutex::new(None);
 
-pub struct ControllerState {
+#[derive(Debug, Default, Clone, Copy)]
+pub struct HalfControllerState {
     pub forward: bool,
     pub backward: bool,
     pub left: bool,
     pub right: bool,
+    pub running: bool,
+
+    pub mouse_pos: (i32, i32),
+    pub left_click: bool,
+    pub right_click: bool,
 }
 
-impl Default for ControllerState {
-    fn default() -> Self {
-        Self {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false,
-        }
-    }
+#[derive(Debug, Default)]
+pub struct ControllerState {
+    pub current: HalfControllerState,
+    pub previous: HalfControllerState,
 }
 
 pub struct TasPlayer {
     playing: bool,
-    start_tick: u64,
+    start_tick: u32,
+    current_tick: u32,
     next_line: usize,
     script: script::Script,
 
     controller: ControllerState,
-
-    // This should be removed later, in favor of making
-    // the "update_controller" function read current tick
-    // from global state
-    current_tick: u64,
 }
 
 impl TasPlayer {
@@ -55,14 +51,14 @@ impl TasPlayer {
                     None
                 }
                 Ok(script) => {
-                    debug!("{script:#?}");
+                    // debug!("{script:#?}");
                     Some(Self {
                         playing: false,
                         start_tick: 0,
+                        current_tick: 0,
                         next_line: 0,
                         script,
                         controller: Default::default(),
-                        current_tick: 0,
                     })
                 }
             },
@@ -70,9 +66,9 @@ impl TasPlayer {
     }
 
     /// Starts the TAS
-    pub fn start(&mut self, start_tick: u64) {
-        self.start_tick = start_tick;
-        self.current_tick = start_tick;
+    pub fn start(&mut self) {
+        self.start_tick = unsafe { MAIN_LOOP_COUNT.read() };
+        self.current_tick = 0;
         self.playing = true;
     }
 
@@ -95,22 +91,50 @@ impl TasPlayer {
 
         // Update controller
         // Get pressed keys
-        self.current_tick += 1;
-        let next_line = &self.script.lines[self.next_line];
-        if next_line.tick == self.current_tick {
-            self.next_line += 1;
+        let current_tick = unsafe { MAIN_LOOP_COUNT.read() } - self.start_tick;
+        if self.current_tick != current_tick {
+            self.current_tick = current_tick;
+            let next_line = &self.script.lines[self.next_line];
 
-            for key in &next_line.keys {
-                match key {
-                    'Z' => self.controller.forward = true,
-                    'z' => self.controller.forward = false,
-                    'Q' => self.controller.left = true,
-                    'q' => self.controller.left = false,
-                    'S' => self.controller.backward = true,
-                    's' => self.controller.backward = false,
-                    'D' => self.controller.right = true,
-                    'd' => self.controller.right = false,
-                    _ => {}
+            self.controller.previous = self.controller.current;
+
+            // Do the auto lifting of the mouse buttons
+            if self.controller.previous.left_click {
+                self.controller.current.left_click = false;
+            }
+            if self.controller.previous.right_click {
+                self.controller.current.right_click = false;
+            }
+
+            if next_line.tick == current_tick {
+                self.next_line += 1;
+    
+                for key in &next_line.keys {
+                    match key {
+                        // Movement
+                        'U' => self.controller.current.forward = true,
+                        'u' => self.controller.current.forward = false,
+                        'L' => self.controller.current.left = true,
+                        'l' => self.controller.current.left = false,
+                        'D' => self.controller.current.backward = true,
+                        'd' => self.controller.current.backward = false,
+                        'R' => self.controller.current.right = true,
+                        'r' => self.controller.current.right = false,
+    
+                        // Sprint
+                        'S' => self.controller.current.running = true,
+                        's' => self.controller.current.running = false,
+    
+                        // Toggle puzzle
+                        'P' => self.controller.current.left_click = true,
+                        'p' => self.controller.current.right_click = true,
+    
+                        _ => {}
+                    }
+                }
+
+                if let Some(mouse) = next_line.mouse {
+                    self.controller.current.mouse_pos = mouse;
                 }
             }
         }

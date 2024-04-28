@@ -22,3 +22,12 @@ Therefore, when you press a key, the value in the table will be:
 The following values have been seen:
     - 0x7A -> Z
     - 0x10E -> LSHIFT
+
+## Windows event handling
+On the event handling side, the game only uses:
+- WM_INPUT
+- WM_LBUTTONDOWN/UP
+- WM_RBUTTONDOWN/UP
+to take player actions. All others are superfluous, so we use these to send events to the game.
+
+WM_MOUSEMOVE is used for menu movement.

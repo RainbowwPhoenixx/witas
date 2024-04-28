@@ -1,10 +1,14 @@
 use retour::static_detour;
-use std::ffi::CStr;
+use std::ptr::addr_of;
+use std::{ffi::CStr, marker::PhantomData};
 use tracing::{debug, error, info};
-use windows::Win32::UI::Input::RAWINPUT;
 use windows::Win32::UI::WindowsAndMessaging::MSG;
+use windows::Win32::{Foundation::POINT, UI::Input::RAWINPUT};
 
-use crate::tas_player::{TasPlayer, TAS_PLAYER};
+use crate::{
+    tas_player::{TasPlayer, TAS_PLAYER},
+    windows_input::Message,
+};
 
 /// Inits a list of hooks.
 ///
@@ -73,32 +77,78 @@ macro_rules! disable_hook {
     };
 }
 
+pub struct PointerChain<'a, T>(&'a [usize], PhantomData<T>);
+
+impl<'a, T: Copy> PointerChain<'a, T> {
+    const fn new(chain: &'a [usize]) -> Self {
+        Self(chain, PhantomData)
+    }
+
+    fn resolve_addr(&self) -> usize {
+        let mut addr = self.0[0];
+        for offset in &self.0[1..] {
+            addr = unsafe { *(addr as *const _) };
+            addr += offset;
+        }
+        addr
+    }
+
+    pub unsafe fn read(&self) -> T {
+        let addr = self.resolve_addr();
+
+        std::mem::transmute(*(addr as *const T))
+    }
+
+    pub unsafe fn write(&self, value: T) {
+        let addr = self.resolve_addr();
+
+        *(addr as *mut T) = value;
+    }
+}
+
 // Some useful defs
-#[allow(unused)]
 #[repr(C)]
 enum KeyCode {
     // Movement keys
     Z = 0x5A,
     Q = 0x51,
-    S = 0x32,
+    S = 0x53,
     D = 0x44,
+    LShift = 0xA0,
+
+    // Mouse
+    LButton = 0x01,
+    RButton = 0x02,
+
+    // Puzzle toggle
+    Space = 0x20,
 
     // Play tas
-    P = 0x50,
+    T = 0x54,
+
+    // Unused
+    _P = 0x50,
 }
 
 // Hooking shit
 static_detour! {
     static MainLoopStart: unsafe extern "win64" fn();
     static GetInput: unsafe extern "win64" fn(usize, *const RAWINPUT) -> u64;
+    static HandleAllMessages: unsafe extern "win64" fn(usize, u64);
     static HandleMessage: unsafe extern "win64" fn (usize, *const MSG) -> u64;
     static DeclareConsoleCommands: unsafe extern "win64" fn();
     static DeclareConsoleCommand: unsafe extern "win64" fn(usize, usize, usize, u32, u32);
     static HandleKeyboardInput: unsafe extern "win64" fn(usize, u8, u8, u8, u32, u32) -> u64;
+
+    // Used by the game to check key presses
     static IsKeyPressed: unsafe extern "win64" fn(usize, u32) -> u32;
+    static GetMouseDeltaPos: unsafe extern "win64" fn(usize, *mut i32,  *mut i32,  *mut i32, bool);
 }
 
 static mut INPUT_STUFF_PTR: Option<usize> = None;
+static mut HANDLE_MSG_PARAM1: Option<usize> = None;
+// static MOUSE_COORDS_FROM_SCREEN_CENTER: PointerChain<(i32, i32)> = PointerChain::new(&[0x14469a060, 0x0, 0x9c]);
+pub static MAIN_LOOP_COUNT: PointerChain<u32> = PointerChain::new(&[0x14062d5c8]);
 
 // ------------------------------------------------------------------------------------
 //                                 OUR OVERRIDES
@@ -106,29 +156,117 @@ static mut INPUT_STUFF_PTR: Option<usize> = None;
 
 // Anything in here will be executed at the beginning
 // of every iteration of the main loop
-fn main_loop_begin() {
+fn execute_tas_inputs() {
     let mut player = unsafe { TAS_PLAYER.lock().unwrap() };
-    match unsafe { (INPUT_STUFF_PTR, player.as_mut()) } {
-        (Some(addr), Some(tas_player)) => unsafe {
+    match unsafe { (player.as_mut(), INPUT_STUFF_PTR, HANDLE_MSG_PARAM1) } {
+        (Some(tas_player), Some(input_stuff_this), Some(handle_message_this)) => unsafe {
             if let Some(controller) = tas_player.get_controller() {
-                HandleKeyboardInput.call(
-                    addr,
-                    0,
-                    0,
-                    controller.forward as u8,
-                    KeyCode::Z as u32,
-                    0,
-                );
-                HandleKeyboardInput.call(
-                    addr,
-                    0,
-                    0,
-                    controller.backward as u8,
-                    KeyCode::S as u32,
-                    0,
-                );
-                HandleKeyboardInput.call(addr, 0, 0, controller.left as u8, KeyCode::Q as u32, 0);
-                HandleKeyboardInput.call(addr, 0, 0, controller.right as u8, KeyCode::D as u32, 0);
+                // Movement
+                match (controller.current.forward, controller.previous.forward) {
+                    (true, false) => {
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::Z as u32, 0)
+                    }
+                    (false, true) => {
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::Z as u32, 0)
+                    }
+                    _ => 0,
+                };
+                match (controller.current.backward, controller.previous.backward) {
+                    (true, false) => {
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::S as u32, 0)
+                    }
+                    (false, true) => {
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::S as u32, 0)
+                    }
+                    _ => 0,
+                };
+                match (controller.current.left, controller.previous.left) {
+                    (true, false) => {
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::Q as u32, 0)
+                    }
+                    (false, true) => {
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::Q as u32, 0)
+                    }
+                    _ => 0,
+                };
+                match (controller.current.right, controller.previous.right) {
+                    (true, false) => {
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::D as u32, 0)
+                    }
+                    (false, true) => {
+                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::D as u32, 0)
+                    }
+                    _ => 0,
+                };
+
+                // Running
+                match (controller.current.running, controller.previous.running) {
+                    (true, false) => HandleKeyboardInput.call(
+                        input_stuff_this,
+                        0,
+                        0,
+                        1,
+                        KeyCode::LShift as u32,
+                        0,
+                    ),
+                    (false, true) => HandleKeyboardInput.call(
+                        input_stuff_this,
+                        0,
+                        0,
+                        0,
+                        KeyCode::LShift as u32,
+                        0,
+                    ),
+                    _ => 0,
+                };
+
+                // Puzzle mode toggle
+                let msg_template = MSG {
+                    hwnd: windows::Win32::Foundation::HWND(0),
+                    message: Message::WM_LBUTTONDOWN as u32,
+                    wParam: windows::Win32::Foundation::WPARAM(1),
+                    lParam: windows::Win32::Foundation::LPARAM(23593600),
+                    time: 0,
+                    pt: POINT { x: 1000, y: 1000 },
+                };
+                match (
+                    controller.current.left_click,
+                    controller.previous.left_click,
+                ) {
+                    (true, false) => {
+                        let msg = MSG {
+                            message: Message::WM_LBUTTONDOWN as u32,
+                            ..msg_template
+                        };
+                        HandleMessage.call(handle_message_this, addr_of!(msg))
+                    }
+                    (false, true) => {
+                        let msg = MSG {
+                            message: Message::WM_LBUTTONUP as u32,
+                            ..msg_template
+                        };
+                        HandleMessage.call(handle_message_this, addr_of!(msg))}
+                    _ => 0,
+                };
+                match (
+                    controller.current.right_click,
+                    controller.previous.right_click,
+                ) {
+                    (true, false) => {
+                        let msg = MSG {
+                            message: Message::WM_RBUTTONDOWN as u32,
+                            ..msg_template
+                        };
+                        HandleMessage.call(handle_message_this, addr_of!(msg))
+                    }
+                    (false, true) => {
+                        let msg = MSG {
+                            message: Message::WM_RBUTTONUP as u32,
+                            ..msg_template
+                        };
+                        HandleMessage.call(handle_message_this, addr_of!(msg))}
+                    _ => 0,
+                };
             }
         },
         _ => {}
@@ -141,9 +279,38 @@ fn get_input(this: usize, hrawinput: *const RAWINPUT) -> u64 {
     unsafe { GetInput.call(this, hrawinput) }
 }
 
+fn handle_all_messages(this: usize, idk: u64) {
+    unsafe { HandleAllMessages.call(this, idk) }
+    execute_tas_inputs()
+}
+
 fn handle_message(this: usize, message: *const MSG) -> u64 {
-    // let val = unsafe { *message };
-    // info!("handle_message: {val:#?}");
+    unsafe { HANDLE_MSG_PARAM1 = Some(this) };
+
+    let val = unsafe { *message }.message;
+    let full_msg = unsafe {*message};
+
+    match Message::try_from(val) {
+        Ok(msg) => match msg {
+            Message::WM_INPUT => {}
+            Message::WM_KEYDOWN => return 0,
+            Message::WM_KEYUP => return 0,
+            Message::WM_CHAR => return 0,
+            Message::WM_DEADCHAR => return 0,
+            Message::WM_SYSKEYDOWN => {}
+            Message::WM_SYSKEYUP => return 0,
+            Message::WM_MOUSEMOVE => {},
+            Message::WM_LBUTTONDOWN => {},
+            Message::WM_LBUTTONUP => {}
+            Message::WM_LBUTTONDLBCLK => {}
+            Message::WM_RBUTTONDOWN => {}
+            Message::WM_RBUTTONUP => {}
+            Message::WM_RBUTTONDBCLK => {}
+            _ => debug!("This message is recieved! {msg:#?}"),
+        },
+        Err(_) => debug!("handle_message: unkown message {val}"),
+    }
+
     unsafe { HandleMessage.call(this, message) }
 }
 
@@ -171,7 +338,7 @@ fn handle_keyboard_input(
     // );
     unsafe { INPUT_STUFF_PTR = Some(this) };
 
-    if virtual_keycode == KeyCode::P as u32 && press_down == 1 {
+    if virtual_keycode == KeyCode::T as u32 && press_down == 1 {
         unsafe {
             let mut tas_player = TAS_PLAYER.lock().unwrap();
 
@@ -179,7 +346,10 @@ fn handle_keyboard_input(
                 "/home/rainbow/Documents/dev/the witness/witness-tas/example.wtas".to_owned(),
             );
 
-            tas_player.as_mut().unwrap().start(0)
+            match tas_player.as_mut() {
+                Some(player) => player.start(),
+                None => {},
+            }
         }
     }
 
@@ -205,6 +375,37 @@ fn is_key_pressed(this: usize, key: u32) -> u32 {
     res
 }
 
+fn get_mouse_delta_pos(
+    input_thing: usize,
+    mouse_x_out: *mut i32,
+    mouse_y_out: *mut i32,
+    mwheel_out: *mut i32,
+    idk: bool,
+) {
+    unsafe { GetMouseDeltaPos.call(input_thing, mouse_x_out, mouse_y_out, mwheel_out, idk) };
+
+    // Override the values during tas replay
+    let mut player = match unsafe { TAS_PLAYER.lock() } {
+        Ok(player) => player,
+        Err(_) => return,
+    };
+
+    let controller = match player.as_mut() {
+        Some(tas_player) => tas_player.get_controller(),
+        None => return,
+    };
+
+    let mouse_coords = match controller {
+        Some(controller) => controller.current.mouse_pos,
+        None => return,
+    };
+
+    unsafe {
+        *mouse_x_out = mouse_coords.0;
+        *mouse_y_out = mouse_coords.1;
+    }
+}
+
 // ------------------------------------------------------------------------------------
 //                                 ACTUAL HOOKING
 // ------------------------------------------------------------------------------------
@@ -221,13 +422,15 @@ pub fn init_hooks() {
 
     // Init the hooks
     let success = init_hook!(
-        MainLoopStart          @ 0x1401e5120 -> main_loop_begin,
+        // MainLoopStart          @ 0x1401e5120 -> main_loop_begin,
         GetInput               @ 0x140346110 -> get_input,
+        HandleAllMessages      @ 0x140345a60 -> handle_all_messages,
         HandleMessage          @ 0x140345bc0 -> handle_message,
         DeclareConsoleCommands @ 0x140071b20 -> declare_console_commands,
         DeclareConsoleCommand  @ 0x1402f58b0 -> declare_console_command,
         HandleKeyboardInput    @ 0x140344a60 -> handle_keyboard_input,
         IsKeyPressed           @ 0x1403448e0 -> is_key_pressed,
+        GetMouseDeltaPos       @ 0x1403448f0 -> get_mouse_delta_pos,
     );
 
     if !success {
@@ -238,13 +441,15 @@ pub fn init_hooks() {
 
 pub fn enable_hooks() {
     let success = enable_hook!(
-        MainLoopStart,
+        // MainLoopStart,
         GetInput,
-        // HandleMessage,
+        HandleAllMessages,
+        HandleMessage,
         DeclareConsoleCommands,
         // DeclareConsoleCommand,
         HandleKeyboardInput,
         // IsKeyPressed,
+        GetMouseDeltaPos,
     );
 
     if !success {
@@ -255,13 +460,15 @@ pub fn enable_hooks() {
 #[allow(unused)]
 pub fn disable_hooks() {
     let success = disable_hook!(
-        MainLoopStart,
+        // MainLoopStart,
         GetInput,
+        HandleAllMessages,
         HandleMessage,
         DeclareConsoleCommands,
         DeclareConsoleCommand,
         HandleKeyboardInput,
         IsKeyPressed,
+        GetMouseDeltaPos,
     );
 
     if !success {

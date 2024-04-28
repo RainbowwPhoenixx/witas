@@ -3,9 +3,9 @@
 ## Features
 - Some functions hooked and output logging to a file.
 - Basic automation of the movement keys
+- Playing a tas from a script input file
 
 ## Planned features
-- Playing a tas from a script input file
 - Playback control: pausing, fast forwarding
 - Savestates
 - Various utilites to help with tasing
@@ -21,9 +21,7 @@
 - Document the script format
 - Extend script format
 - Test consistency
-- Add mouse movement/running
-- Base the tas timer on the global timer instead of the number of calls to get_controller
-- Add press/release information to the ControllerState to mimic actual key press
+- Automatically release buttons at the end
 
 # Contributing
 The project is open to contributions. TODO: brief explanation of how it works.
