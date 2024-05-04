@@ -5,7 +5,7 @@ use tracing::info;
 mod hooks;
 mod script;
 mod tas_player;
-mod windows_input;
+mod witness;
 
 #[ctor::ctor]
 fn main() {

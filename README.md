@@ -4,6 +4,7 @@
 - Some functions hooked and output logging to a file.
 - Basic automation of the movement keys
 - Playing a tas from a script input file
+- Extremely minor modding used to make the physics consistent
 
 ## Planned features
 - Playback control: pausing, fast forwarding
@@ -19,7 +20,6 @@
 
 ## Todo
 - Document the script format
-- Test consistency
 - Automatically release buttons at the end
 - Handle resolution:
     - Make mouse movement independent of res?

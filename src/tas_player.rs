@@ -1,11 +1,11 @@
 use std::sync::Mutex;
 
 use crate::{
-    hooks::{DoRestartMaybe, MAIN_LOOP_COUNT, NEW_GAME_FLAG},
+    hooks::{DoRestart, MAIN_LOOP_COUNT, NEW_GAME_FLAG},
     script::{self, Script, StartType},
 };
 use chumsky::Parser as _;
-use tracing::error;
+use tracing::{error, info};
 
 pub static mut TAS_PLAYER: Mutex<Option<TasPlayer>> = Mutex::new(None);
 
@@ -82,7 +82,7 @@ impl TasPlayer {
                 // These actions are lifted from the function in the witness
                 //  that handle the menu for new game
                 NEW_GAME_FLAG.write(true);
-                DoRestartMaybe.call();
+                DoRestart.call();
             },
             StartType::Save(_) => {
                 error!("Starting from a save is not implemented yet. Starting now instead.")
@@ -92,11 +92,16 @@ impl TasPlayer {
         self.start_tick = unsafe { MAIN_LOOP_COUNT.read() };
         self.current_tick = 0;
         self.playing = true;
+
+        info!("Started TAS")
     }
 
     /// Stops the TAS
     pub fn stop(&mut self) {
         self.playing = false;
+
+        let ticks = self.current_tick;
+        info!("Stopped TAS after {ticks} ticks.")
     }
 
     /// Get the controller input and possibly advance state.
@@ -163,5 +168,13 @@ impl TasPlayer {
 
         // Return it
         Some(&self.controller)
+    }
+
+    pub fn is_playing(&self) -> bool {
+        self.playing
+    }
+
+    pub fn get_current_tick(&self) -> u32 {
+        self.current_tick
     }
 }

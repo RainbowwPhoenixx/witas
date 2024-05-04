@@ -5,10 +5,8 @@ use tracing::{debug, error, info};
 use windows::Win32::UI::WindowsAndMessaging::MSG;
 use windows::Win32::{Foundation::POINT, UI::Input::RAWINPUT};
 
-use crate::{
-    tas_player::{TasPlayer, TAS_PLAYER},
-    windows_input::Message,
-};
+use crate::tas_player::{TasPlayer, TAS_PLAYER};
+use crate::witness::windows_types::{Message, VirtualKeyCode};
 
 /// Inits a list of hooks.
 ///
@@ -106,33 +104,7 @@ impl<'a, T: Copy> PointerChain<'a, T> {
     }
 }
 
-// Some useful defs
-#[repr(C)]
-enum KeyCode {
-    // Movement keys
-    W = 0x57,
-    A = 0x41,
-    S = 0x53,
-    D = 0x44,
-    _Z = 0x5A,
-    _Q = 0x51,
-    LShift = 0xA0,
-
-    // Mouse
-    _LButton = 0x01,
-    _RButton = 0x02,
-
-    // Puzzle toggle
-    _Space = 0x20,
-
-    // Play tas
-    T = 0x54,
-
-    // Unused
-    _P = 0x50,
-}
-
-// Hooking shit
+// Hooking shit, split because recursion limit
 static_detour! {
     static MainLoopStart: unsafe extern "win64" fn();
     static GetInput: unsafe extern "win64" fn(usize, *const RAWINPUT) -> u64;
@@ -146,15 +118,20 @@ static_detour! {
     static IsKeyPressed: unsafe extern "win64" fn(usize, u32) -> u32;
     static GetMouseDeltaPos: unsafe extern "win64" fn(usize, *mut i32,  *mut i32,  *mut i32, bool);
 
-    // Idk
-    pub static DoRestartMaybe: unsafe extern "win64" fn();
+    // For newgame tas start mode
+    pub static DoRestart: unsafe extern "win64" fn();
+
+    // Drawing stuff
+    static drawScreen: unsafe extern "win64" fn();
 }
 
-static mut INPUT_STUFF_PTR: Option<usize> = None;
+static mut PTR_INPUT_STH1: PointerChain<usize> = PointerChain::new(&[0x14469a060, 0x0]);
 static mut HANDLE_MSG_PARAM1: Option<usize> = None;
 // static MOUSE_COORDS_FROM_SCREEN_CENTER: PointerChain<(i32, i32)> = PointerChain::new(&[0x14469a060, 0x0, 0x9c]);
 pub static MAIN_LOOP_COUNT: PointerChain<u32> = PointerChain::new(&[0x14062d5c8]);
 pub static NEW_GAME_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d076]);
+pub static DEBUG_SHOW_EPS: PointerChain<bool> = PointerChain::new(&[0x140630410]);
+pub static FRAMETIME: PointerChain<f64> = PointerChain::new(&[0x1406211d8]);
 
 // ------------------------------------------------------------------------------------
 //                                 OUR OVERRIDES
@@ -164,43 +141,45 @@ pub static NEW_GAME_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d076])
 // of every iteration of the main loop
 fn execute_tas_inputs() {
     let mut player = unsafe { TAS_PLAYER.lock().unwrap() };
-    match unsafe { (player.as_mut(), INPUT_STUFF_PTR, HANDLE_MSG_PARAM1) } {
-        (Some(tas_player), Some(input_stuff_this), Some(handle_message_this)) => unsafe {
+    let input_sth1 = unsafe { PTR_INPUT_STH1.read() };
+
+    match unsafe { (player.as_mut(), HANDLE_MSG_PARAM1) } {
+        (Some(tas_player), Some(handle_message_this)) => unsafe {
             if let Some(controller) = tas_player.get_controller() {
                 // Movement
                 match (controller.current.forward, controller.previous.forward) {
                     (true, false) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::W as u32, 0)
+                        HandleKeyboardInput.call(input_sth1, 0, 0, 1, VirtualKeyCode::W as u32, 0)
                     }
                     (false, true) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::W as u32, 0)
+                        HandleKeyboardInput.call(input_sth1, 0, 0, 0, VirtualKeyCode::W as u32, 0)
                     }
                     _ => 0,
                 };
                 match (controller.current.backward, controller.previous.backward) {
                     (true, false) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::S as u32, 0)
+                        HandleKeyboardInput.call(input_sth1, 0, 0, 1, VirtualKeyCode::S as u32, 0)
                     }
                     (false, true) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::S as u32, 0)
+                        HandleKeyboardInput.call(input_sth1, 0, 0, 0, VirtualKeyCode::S as u32, 0)
                     }
                     _ => 0,
                 };
                 match (controller.current.left, controller.previous.left) {
                     (true, false) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::A as u32, 0)
+                        HandleKeyboardInput.call(input_sth1, 0, 0, 1, VirtualKeyCode::A as u32, 0)
                     }
                     (false, true) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::A as u32, 0)
+                        HandleKeyboardInput.call(input_sth1, 0, 0, 0, VirtualKeyCode::A as u32, 0)
                     }
                     _ => 0,
                 };
                 match (controller.current.right, controller.previous.right) {
                     (true, false) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 1, KeyCode::D as u32, 0)
+                        HandleKeyboardInput.call(input_sth1, 0, 0, 1, VirtualKeyCode::D as u32, 0)
                     }
                     (false, true) => {
-                        HandleKeyboardInput.call(input_stuff_this, 0, 0, 0, KeyCode::D as u32, 0)
+                        HandleKeyboardInput.call(input_sth1, 0, 0, 0, VirtualKeyCode::D as u32, 0)
                     }
                     _ => 0,
                 };
@@ -208,19 +187,19 @@ fn execute_tas_inputs() {
                 // Running
                 match (controller.current.running, controller.previous.running) {
                     (true, false) => HandleKeyboardInput.call(
-                        input_stuff_this,
+                        input_sth1,
                         0,
                         0,
                         1,
-                        KeyCode::LShift as u32,
+                        VirtualKeyCode::LShift as u32,
                         0,
                     ),
                     (false, true) => HandleKeyboardInput.call(
-                        input_stuff_this,
+                        input_sth1,
                         0,
                         0,
                         0,
-                        KeyCode::LShift as u32,
+                        VirtualKeyCode::LShift as u32,
                         0,
                     ),
                     _ => 0,
@@ -289,7 +268,9 @@ fn get_input(this: usize, hrawinput: *const RAWINPUT) -> u64 {
 
 fn handle_all_messages(this: usize, idk: u64) {
     unsafe { HandleAllMessages.call(this, idk) }
-    execute_tas_inputs()
+
+    // Using a mix of keyboard inputs and messages isn't very good here, TODO: make it use the same mechanism
+    execute_tas_inputs();
 }
 
 fn handle_message(this: usize, message: *const MSG) -> u64 {
@@ -343,9 +324,8 @@ fn handle_keyboard_input(
     //     ri_key_break,
     //     ri_key_e0, press_down, virtual_keycode, scan_code
     // );
-    unsafe { INPUT_STUFF_PTR = Some(this) };
 
-    if virtual_keycode == KeyCode::T as u32 && press_down == 1 {
+    if virtual_keycode == VirtualKeyCode::P as u32 && press_down == 1 {
         unsafe {
             let mut tas_player = TAS_PLAYER.lock().unwrap();
 
@@ -413,6 +393,10 @@ fn get_mouse_delta_pos(
     }
 }
 
+fn draw_override() {
+    unsafe { drawScreen.call() }
+}
+
 // ------------------------------------------------------------------------------------
 //                                 ACTUAL HOOKING
 // ------------------------------------------------------------------------------------
@@ -433,6 +417,8 @@ pub fn init_hooks() {
         unreachable!()
     }
 
+    let placeholder_0arg = || placeholder();
+
     // Init the hooks
     let success = init_hook!(
         // MainLoopStart          @ 0x1401e5120 -> main_loop_begin,
@@ -444,8 +430,22 @@ pub fn init_hooks() {
         HandleKeyboardInput    @ 0x140344a60 -> handle_keyboard_input,
         IsKeyPressed           @ 0x1403448e0 -> is_key_pressed,
         GetMouseDeltaPos       @ 0x1403448f0 -> get_mouse_delta_pos,
-        DoRestartMaybe         @ 0x1401f9e60 -> placeholder,
+        DoRestart              @ 0x1401f9e60 -> placeholder_0arg,
+        drawScreen             @ 0x1401c8970 -> draw_override,
     );
+
+    // Patch frametime to make physics consistent
+    let nops = &[0x90_u8; 5];
+    let frametime_set_addr = 0x1402e96cf as *const u8;
+    unsafe {
+        let _ = region::protect(
+            frametime_set_addr,
+            5,
+            region::Protection::READ_WRITE_EXECUTE,
+        );
+        std::ptr::copy_nonoverlapping(nops.as_ptr(), frametime_set_addr as *mut u8, 5);
+        FRAMETIME.write(0.0166666666);
+    }
 
     if !success {
         error!("Failed to initialize hooks, abandonning loading.");
@@ -464,6 +464,7 @@ pub fn enable_hooks() {
         HandleKeyboardInput,
         // IsKeyPressed,
         GetMouseDeltaPos,
+        drawScreen,
     );
 
     if !success {
@@ -483,6 +484,7 @@ pub fn disable_hooks() {
         HandleKeyboardInput,
         IsKeyPressed,
         GetMouseDeltaPos,
+        drawScreen,
     );
 
     if !success {
