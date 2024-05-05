@@ -5,6 +5,8 @@
 - Basic automation of the movement keys
 - Playing a tas from a script input file
 - Extremely minor modding used to make the physics consistent
+- TAS helper tools:
+    - Player position history during the tas replay
 
 ## Planned features
 - Playback control: pausing, fast forwarding

@@ -19,16 +19,17 @@ pub struct Vec2 {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct Color {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
+pub struct Color<T> {
+    pub r: T,
+    pub g: T,
+    pub b: T,
+    pub a: T,
 }
 
+#[derive(Clone, Copy)]
 pub struct Entity {
     unk1: [u8; 0x8],
     name: usize,
     unk2: [u8; 0x14],
-    position: Vec3,
+    pub position: Vec3,
 }

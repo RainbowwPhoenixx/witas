@@ -1,8 +1,8 @@
 use std::sync::Mutex;
 
 use crate::{
-    hooks::{DoRestart, MAIN_LOOP_COUNT, NEW_GAME_FLAG},
-    script::{self, Script, StartType},
+    hooks::{DoRestart, MAIN_LOOP_COUNT, NEW_GAME_FLAG, PLAYER},
+    script::{self, Script, StartType}, witness::witness_types::Vec3,
 };
 use chumsky::Parser as _;
 use tracing::{error, info};
@@ -36,6 +36,9 @@ pub struct TasPlayer {
     script: script::Script,
 
     controller: ControllerState,
+
+    // Utilities
+    pub trace: Playertrace,
 }
 
 impl TasPlayer {
@@ -63,6 +66,7 @@ impl TasPlayer {
                             next_line: 0,
                             script,
                             controller: Default::default(),
+                            trace: Default::default()
                         }),
                         Err(err) => {
                             error!("Parse error: {err}");
@@ -93,6 +97,8 @@ impl TasPlayer {
         self.current_tick = 0;
         self.playing = true;
 
+        self.trace.clear();
+
         info!("Started TAS")
     }
 
@@ -120,6 +126,9 @@ impl TasPlayer {
         // Get pressed keys
         let current_tick = unsafe { MAIN_LOOP_COUNT.read() } - self.start_tick;
         if self.current_tick != current_tick {
+            // Update the player pos history
+            self.trace.positions.push(unsafe { PLAYER.read().position });
+
             self.current_tick = current_tick;
             let next_line = &self.script.lines[self.next_line];
 
@@ -176,5 +185,16 @@ impl TasPlayer {
 
     pub fn get_current_tick(&self) -> u32 {
         self.current_tick
+    }
+}
+
+#[derive(Default)]
+pub struct Playertrace {
+    pub positions: Vec<Vec3>,
+}
+
+impl Playertrace {
+    pub fn clear(&mut self) {
+        self.positions.clear()
     }
 }

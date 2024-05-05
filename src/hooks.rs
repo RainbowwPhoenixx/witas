@@ -7,6 +7,7 @@ use windows::Win32::{Foundation::POINT, UI::Input::RAWINPUT};
 
 use crate::tas_player::{TasPlayer, TAS_PLAYER};
 use crate::witness::windows_types::{Message, VirtualKeyCode};
+use crate::witness::witness_types::{Color, Entity, Vec3};
 
 /// Inits a list of hooks.
 ///
@@ -120,9 +121,14 @@ static_detour! {
 
     // For newgame tas start mode
     pub static DoRestart: unsafe extern "win64" fn();
+}
 
+// Damn you recursion limit
+static_detour! {
     // Drawing stuff
     static drawScreen: unsafe extern "win64" fn();
+    static drawSphere: unsafe extern "win64" fn(*const Vec3, f32, Color<f32>, bool);
+    static MiddleOfDrawing: unsafe extern "win64" fn(usize, usize);
 }
 
 static mut PTR_INPUT_STH1: PointerChain<usize> = PointerChain::new(&[0x14469a060, 0x0]);
@@ -132,6 +138,8 @@ pub static MAIN_LOOP_COUNT: PointerChain<u32> = PointerChain::new(&[0x14062d5c8]
 pub static NEW_GAME_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d076]);
 pub static DEBUG_SHOW_EPS: PointerChain<bool> = PointerChain::new(&[0x140630410]);
 pub static FRAMETIME: PointerChain<f64> = PointerChain::new(&[0x1406211d8]);
+
+pub static PLAYER: PointerChain<Entity> = PointerChain::new(&[0x14062d0a0, 0x18, 0x1E465 * 8, 0x0]);
 
 // ------------------------------------------------------------------------------------
 //                                 OUR OVERRIDES
@@ -397,6 +405,30 @@ fn draw_override() {
     unsafe { drawScreen.call() }
 }
 
+fn middle_of_drawing(param1: usize, param2: usize) {
+    // Call original function. The appropriate calling parameters should
+    // already be set by whoever is calling us. We don't need to care about
+    // them, we just want to briefly jump to our own code after
+    unsafe { MiddleOfDrawing.call(param1, param2) }
+
+    unsafe {
+        let color = Color {
+            r: 0.0,
+            g: 1.0,
+            b: 0.0,
+            a: 1.0,
+        };
+
+        if let Ok(player) = TAS_PLAYER.lock() {
+            if let Some(player) = player.as_ref() {
+                for &pos in &player.trace.positions {
+                    drawSphere.call(addr_of!(pos), 0.05, color, false);
+                }
+            }
+        };
+    }
+}
+
 // ------------------------------------------------------------------------------------
 //                                 ACTUAL HOOKING
 // ------------------------------------------------------------------------------------
@@ -418,6 +450,7 @@ pub fn init_hooks() {
     }
 
     let placeholder_0arg = || placeholder();
+    let placeholder_4arg = |_, _, _, _| placeholder();
 
     // Init the hooks
     let success = init_hook!(
@@ -432,6 +465,8 @@ pub fn init_hooks() {
         GetMouseDeltaPos       @ 0x1403448f0 -> get_mouse_delta_pos,
         DoRestart              @ 0x1401f9e60 -> placeholder_0arg,
         drawScreen             @ 0x1401c8970 -> draw_override,
+        drawSphere             @ 0x1400761d0 -> placeholder_4arg,
+        MiddleOfDrawing        @ 0x140274b10 -> middle_of_drawing,
     );
 
     // Patch frametime to make physics consistent
@@ -465,6 +500,7 @@ pub fn enable_hooks() {
         // IsKeyPressed,
         GetMouseDeltaPos,
         drawScreen,
+        MiddleOfDrawing,
     );
 
     if !success {
@@ -485,6 +521,7 @@ pub fn disable_hooks() {
         IsKeyPressed,
         GetMouseDeltaPos,
         drawScreen,
+        MiddleOfDrawing
     );
 
     if !success {
