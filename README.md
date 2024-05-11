@@ -1,24 +1,34 @@
 # witas - The Witness tas tools
 
 ## Features
-- Some functions hooked and output logging to a file.
-- Basic automation of the movement keys
+### Central features
 - Playing a tas from a script input file
-- Extremely minor modding used to make the physics consistent
-- TAS helper tools:
-    - Player position history during the tas replay
+- Extremely minor modding used to make the physics consistent (fixed at 60Hz)
+- A simple GUI to:
+    - Control TAS playback (Play, Stop, Fast-Forward)
+    - Some information like current playback tick and player pos/angles
+
+### Additionnal features
+- During TAS playback, the player position is recorded and the displayed physically in the world with little spheres
+- Disables game slowing down when alt-tabbing so you can actually use the GUI without messing up the playback
+- Useful keybinds (only with the game focused):
+    - P: quick tas replay
+    - N: noclip toggle
+    - J/K: position saving/restoring (very useful while TASing snipes)
 
 ## Planned features
-- Playback control: pausing, fast forwarding
+- Frame by frame
 - Savestates
-- Various utilites to help with tasing
-    - Huds
-    - routing helpers
-    - freecam/noclip?
-    - probably will have some feature overlap with the trainer
-    - In my wildest dreams, we would also leverage pathfinding and automatic puzzle solving
+- In my wildest dreams, we would also leverage pathfinding and automatic puzzle solving
+- Puzzle solving hud for snipes, to help you see what you're doing
 - Scan instead of adresses
-- Windows support
+- Windows support, with automatic DLL injection when opening GUI
+- More stuff for the GUI (with tabs to sort this stuff):
+    - configutable TAS folder (currently forced to "game dir/tas")
+    - Trace options (how many points to display, etc)
+    - Teleport to specific trace points
+    - "About" tab with version, etc
+
 
 ## Todo
 - Document the script format
@@ -28,4 +38,6 @@
     - Make res a parameter of the script?
 
 # Contributing
-The project is open to contributions. TODO: brief explanation of how it works.
+The project is open to contributions. 
+
+TODO: brief explanation of how it works.

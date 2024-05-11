@@ -2,10 +2,11 @@ use core::time;
 
 use tracing::info;
 
-mod hooks;
-mod script;
-mod tas_player;
-mod witness;
+pub mod hooks;
+pub mod script;
+pub mod tas_player;
+pub mod witness;
+pub mod communication;
 
 #[ctor::ctor]
 fn main() {
@@ -37,6 +38,7 @@ fn setup() {
 
     hooks::init_hooks();
     hooks::enable_hooks();
+    tas_player::TasPlayer::init();
 
     info!("Initialiser thread done.");
 }

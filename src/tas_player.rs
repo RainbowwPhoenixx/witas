@@ -1,13 +1,28 @@
-use std::sync::Mutex;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::{collections::VecDeque, sync::Mutex};
 
+use crate::communication::{server_thread, ControllerToTasMessage, TasToControllerMessage};
+use crate::hooks::CAMERA_ANG;
 use crate::{
     hooks::{DoRestart, MAIN_LOOP_COUNT, NEW_GAME_FLAG, PLAYER},
-    script::{self, Script, StartType}, witness::witness_types::Vec3,
+    script::{self, Script, StartType},
+    witness::witness_types::Vec3,
 };
 use chumsky::Parser as _;
+use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 pub static mut TAS_PLAYER: Mutex<Option<TasPlayer>> = Mutex::new(None);
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum PlaybackState {
+    Stopped,
+    Playing,
+    Paused,
+
+    // This state is only used for the tas controller interface
+    Skipping,
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct HalfControllerState {
@@ -29,11 +44,17 @@ pub struct ControllerState {
 }
 
 pub struct TasPlayer {
-    playing: bool,
+    send: Sender<TasToControllerMessage>,
+    recv: Receiver<ControllerToTasMessage>,
+    state: PlaybackState,
+
     start_tick: u32,
     current_tick: u32,
+    skipto_tick: u32,
+
     next_line: usize,
-    script: script::Script,
+    script_name: String,
+    script: Option<script::Script>,
 
     controller: ControllerState,
 
@@ -42,45 +63,76 @@ pub struct TasPlayer {
 }
 
 impl TasPlayer {
-    /// Creates a TasPlayer from a file
-    pub fn from_file(s: String) -> Option<Self> {
-        match std::fs::read_to_string(s) {
+    /// Inits the global
+    pub fn init() {
+        let mut tas_player = unsafe { TAS_PLAYER.lock().unwrap() };
+
+        if tas_player.is_none() {
+            *tas_player = Some(Self::new());
+        }
+    }
+
+    /// Creates a new TasPlayer
+    fn new() -> Self {
+        let (send, from_client) = channel();
+        let (to_client, recv) = channel();
+        std::thread::spawn(|| server_thread(send, recv));
+
+        Self {
+            send: to_client,
+            recv: from_client,
+            state: PlaybackState::Stopped,
+            start_tick: 0,
+            current_tick: 0,
+            skipto_tick: 0,
+            next_line: 0,
+            script_name: "".to_string(),
+            script: None,
+            controller: Default::default(),
+            trace: Default::default(),
+        }
+    }
+
+    /// Starts the TAS
+    /// If file is None, replay the current tas
+    pub fn start(&mut self, file: Option<&String>) {
+        self.stop();
+
+        let file = file.unwrap_or(&self.script_name);
+        self.script = match std::fs::read_to_string("./tas/".to_string() + file) {
             Err(err) => {
                 error!("{err}");
+                self.send.send(TasToControllerMessage::ParseErrors(vec![err.to_string()])).unwrap();
                 None
             }
             Ok(src) => match Script::get_parser().parse(src) {
                 Err(parse_errs) => {
-                    parse_errs
-                        .into_iter()
-                        .for_each(|e| error!("Parse error: {e}"));
+                    for err in &parse_errs {
+                        error!("Parse error: {err}");
+                    }
+                    self.send
+                        .send(TasToControllerMessage::ParseErrors(
+                            parse_errs.iter().map(|e| format!("{e}")).collect(),
+                        ))
+                        .unwrap();
                     None
                 }
                 Ok(mut script) => {
-                    // debug!("{script:#?}");
                     match script.pre_process() {
-                        Ok(_) => Some(Self {
-                            playing: false,
-                            start_tick: 0,
-                            current_tick: 0,
-                            next_line: 0,
-                            script,
-                            controller: Default::default(),
-                            trace: Default::default()
-                        }),
+                        Ok(_) => Some(script),
                         Err(err) => {
                             error!("Parse error: {err}");
+                            self.send.send(TasToControllerMessage::ParseErrors(vec![err])).unwrap();
                             None
                         }
                     }
                 }
             },
-        }
-    }
+        };
 
-    /// Starts the TAS
-    pub fn start(&mut self) {
-        match self.script.start {
+        let Some(script) = &self.script else { return };
+
+        match script.start {
             StartType::Now => {}
             StartType::NewGame => unsafe {
                 // These actions are lifted from the function in the witness
@@ -93,9 +145,12 @@ impl TasPlayer {
             }
         }
 
+        self.controller = Default::default();
         self.start_tick = unsafe { MAIN_LOOP_COUNT.read() };
         self.current_tick = 0;
-        self.playing = true;
+        self.next_line = 0;
+        self.state = PlaybackState::Playing;
+        // self.skipto_tick = script.skipto;
 
         self.trace.clear();
 
@@ -104,7 +159,7 @@ impl TasPlayer {
 
     /// Stops the TAS
     pub fn stop(&mut self) {
-        self.playing = false;
+        self.state = PlaybackState::Stopped;
 
         let ticks = self.current_tick;
         info!("Stopped TAS after {ticks} ticks.")
@@ -112,12 +167,30 @@ impl TasPlayer {
 
     /// Get the controller input and possibly advance state.
     pub fn get_controller(&mut self) -> Option<&ControllerState> {
+        self.update_from_server();
+
+        // Update the controller
+        let pos = unsafe { PLAYER.read().position };
+        let ang = unsafe { CAMERA_ANG.read() };
+        self.send
+            .send(TasToControllerMessage::CarlInfo {
+                pos: (pos.x, pos.y, pos.z),
+                ang: (ang.x, ang.y),
+            })
+            .unwrap();
+
+        self.send.send(TasToControllerMessage::PlaybackState(self.get_playback_state())).unwrap();
+
         // If we are not running, exit
-        if !self.playing {
+        if self.state == PlaybackState::Stopped {
             return None;
         }
 
-        if self.next_line >= self.script.lines.len() {
+        let Some(script) = &self.script else {
+            return None;
+        };
+
+        if self.next_line >= script.lines.len() {
             self.stop();
             return None;
         }
@@ -126,11 +199,15 @@ impl TasPlayer {
         // Get pressed keys
         let current_tick = unsafe { MAIN_LOOP_COUNT.read() } - self.start_tick;
         if self.current_tick != current_tick {
+            self.send
+                .send(TasToControllerMessage::CurrentTick(current_tick))
+                .unwrap();
+
             // Update the player pos history
-            self.trace.positions.push(unsafe { PLAYER.read().position });
+            self.trace.push(unsafe { PLAYER.read().position });
 
             self.current_tick = current_tick;
-            let next_line = &self.script.lines[self.next_line];
+            let next_line = &script.lines[self.next_line];
 
             self.controller.previous = self.controller.current;
 
@@ -179,8 +256,32 @@ impl TasPlayer {
         Some(&self.controller)
     }
 
-    pub fn is_playing(&self) -> bool {
-        self.playing
+    fn update_from_server(&mut self) {
+        let Ok(msg) = self.recv.try_recv() else {
+            return;
+        };
+
+        match msg {
+            ControllerToTasMessage::PlayFile(filename) => self.start(Some(&filename)),
+            ControllerToTasMessage::Stop => self.stop(),
+            ControllerToTasMessage::SkipTo(tick) => self.skipto_tick = tick,
+            ControllerToTasMessage::AdvanceFrame => error!("Frame by frame is not implemented yet"),
+        }
+    }
+
+    pub fn should_do_skipping(&self) -> bool {
+        // Only skip after 120 frames, the "eyes opening" animation fucks things up
+        self.state != PlaybackState::Stopped
+            && self.current_tick < self.skipto_tick
+            && self.current_tick > 60
+    }
+
+    pub fn get_playback_state(&self) -> PlaybackState {
+        if self.current_tick < self.skipto_tick {
+            PlaybackState::Skipping
+        } else {
+            self.state
+        }
     }
 
     pub fn get_current_tick(&self) -> u32 {

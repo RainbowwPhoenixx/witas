@@ -5,9 +5,9 @@ use tracing::{debug, error, info};
 use windows::Win32::UI::WindowsAndMessaging::MSG;
 use windows::Win32::{Foundation::POINT, UI::Input::RAWINPUT};
 
-use crate::tas_player::{TasPlayer, TAS_PLAYER};
+use crate::tas_player::{PlaybackState, TAS_PLAYER};
 use crate::witness::windows_types::{Message, VirtualKeyCode};
-use crate::witness::witness_types::{Color, Entity, Vec3};
+use crate::witness::witness_types::{Color, Entity, Vec2, Vec3};
 
 /// Inits a list of hooks.
 ///
@@ -110,7 +110,7 @@ static_detour! {
     static MainLoopStart: unsafe extern "win64" fn();
     static GetInput: unsafe extern "win64" fn(usize, *const RAWINPUT) -> u64;
     static HandleAllMessages: unsafe extern "win64" fn(usize, u64);
-    static HandleMessage: unsafe extern "win64" fn (usize, *const MSG) -> u64;
+    static HandleMessage: unsafe extern "win64" fn(usize, *const MSG) -> u64;
     static DeclareConsoleCommands: unsafe extern "win64" fn();
     static DeclareConsoleCommand: unsafe extern "win64" fn(usize, usize, usize, u32, u32);
     static HandleKeyboardInput: unsafe extern "win64" fn(usize, u8, u8, u8, u32, u32) -> u64;
@@ -121,6 +121,8 @@ static_detour! {
 
     // For newgame tas start mode
     pub static DoRestart: unsafe extern "win64" fn();
+
+    static WindowProcCallback: unsafe extern "win64" fn(usize, u32, u64, u64) -> usize;
 }
 
 // Damn you recursion limit
@@ -129,17 +131,28 @@ static_detour! {
     static drawScreen: unsafe extern "win64" fn();
     static drawSphere: unsafe extern "win64" fn(*const Vec3, f32, Color<f32>, bool);
     static MiddleOfDrawing: unsafe extern "win64" fn(usize, usize);
+
+    static SetCursorToPos: unsafe extern "win64" fn(u64, u32, u32);
 }
 
-static mut PTR_INPUT_STH1: PointerChain<usize> = PointerChain::new(&[0x14469a060, 0x0]);
+static PTR_INPUT_STH1: PointerChain<usize> = PointerChain::new(&[0x14469a060, 0x0]);
 static mut HANDLE_MSG_PARAM1: Option<usize> = None;
 // static MOUSE_COORDS_FROM_SCREEN_CENTER: PointerChain<(i32, i32)> = PointerChain::new(&[0x14469a060, 0x0, 0x9c]);
 pub static MAIN_LOOP_COUNT: PointerChain<u32> = PointerChain::new(&[0x14062d5c8]);
 pub static NEW_GAME_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d076]);
 pub static DEBUG_SHOW_EPS: PointerChain<bool> = PointerChain::new(&[0x140630410]);
 pub static FRAMETIME: PointerChain<f64> = PointerChain::new(&[0x1406211d8]);
-
 pub static PLAYER: PointerChain<Entity> = PointerChain::new(&[0x14062d0a0, 0x18, 0x1E465 * 8, 0x0]);
+pub static NOCLIP: PointerChain<bool> = PointerChain::new(&[0x14062d5b8]);
+pub static CAMERA_POS: PointerChain<Vec3> =
+    PointerChain::new(&[0x14062d0a0, 0x18, 0x1E465 * 8, 0x24]);
+pub static CAMERA_ANG: PointerChain<Vec2> = PointerChain::new(&[0x1406303ec]);
+
+static mut SAVED_CAM_POS: Option<Vec3> = None;
+static mut SAVED_CAM_ANG: Option<Vec2> = None;
+
+// Holds the real tabbed out value, since we make the game forget
+static mut TABBED_OUT: bool = false;
 
 // ------------------------------------------------------------------------------------
 //                                 OUR OVERRIDES
@@ -284,6 +297,15 @@ fn handle_all_messages(this: usize, idk: u64) {
 fn handle_message(this: usize, message: *const MSG) -> u64 {
     unsafe { HANDLE_MSG_PARAM1 = Some(this) };
 
+    // During tas playback, ignore all user messages
+    if let Ok(player) = unsafe { TAS_PLAYER.lock() } {
+        if let Some(player) = player.as_ref() {
+            if player.get_playback_state() != PlaybackState::Stopped {
+                return 0; // The game always returns 0 in this function, let's do the same
+            }
+        }
+    };
+
     let val = unsafe { *message }.message;
 
     match Message::try_from(val) {
@@ -337,15 +359,31 @@ fn handle_keyboard_input(
         unsafe {
             let mut tas_player = TAS_PLAYER.lock().unwrap();
 
-            *tas_player = TasPlayer::from_file(
-                "/home/rainbow/Documents/dev/the witness/witness-tas/example.wtas".to_owned(),
-            );
-
             match tas_player.as_mut() {
-                Some(player) => player.start(),
+                Some(tas_player) => tas_player.start(None),
                 None => {}
             }
         }
+    }
+
+    if virtual_keycode == VirtualKeyCode::N as u32 && press_down == 1 {
+        unsafe { NOCLIP.write(!NOCLIP.read()) };
+    }
+
+    if virtual_keycode == VirtualKeyCode::J as u32 && press_down == 1 {
+        unsafe {
+            SAVED_CAM_POS = Some(CAMERA_POS.read());
+            SAVED_CAM_ANG = Some(CAMERA_ANG.read());
+        };
+        info!("Saved camera pos")
+    }
+    if virtual_keycode == VirtualKeyCode::K as u32 && press_down == 1 {
+        unsafe {
+            if let (Some(pos), Some(ang)) = (SAVED_CAM_POS, SAVED_CAM_ANG) {
+                CAMERA_POS.write(pos);
+                CAMERA_ANG.write(ang);
+            }
+        };
     }
 
     unsafe {
@@ -402,7 +440,18 @@ fn get_mouse_delta_pos(
 }
 
 fn draw_override() {
-    unsafe { drawScreen.call() }
+    // Don't draw during skipping
+    if let Ok(player) = unsafe { TAS_PLAYER.lock() } {
+        if let Some(player) = player.as_ref() {
+            if player.should_do_skipping() {
+                return;
+            }
+        }
+    };
+
+    unsafe {
+        drawScreen.call();
+    }
 }
 
 fn middle_of_drawing(param1: usize, param2: usize) {
@@ -427,6 +476,26 @@ fn middle_of_drawing(param1: usize, param2: usize) {
             }
         };
     }
+}
+
+fn window_proc_callback(idc: usize, msg: u32, wparam: u64, lparam: u64) -> usize {
+    // Override the message indicating lost focus, make the game think it is focused always
+    match msg {
+        0x86 => unsafe {
+            TABBED_OUT = wparam == 0;
+            WindowProcCallback.call(idc, msg, 1, lparam)
+        },
+        _ => unsafe { WindowProcCallback.call(idc, msg, wparam, lparam) },
+    }
+}
+
+fn set_cursor_to_pos(idk: u64, x: u32, y: u32) {
+    // When tabbed out, dont grab cursor
+    if unsafe { TABBED_OUT } {
+        return
+    }
+
+    unsafe { SetCursorToPos.call(idk, x, y) }
 }
 
 // ------------------------------------------------------------------------------------
@@ -467,6 +536,8 @@ pub fn init_hooks() {
         drawScreen             @ 0x1401c8970 -> draw_override,
         drawSphere             @ 0x1400761d0 -> placeholder_4arg,
         MiddleOfDrawing        @ 0x140274b10 -> middle_of_drawing,
+        WindowProcCallback     @ 0x14037aea0 -> window_proc_callback,
+        SetCursorToPos         @ 0x140346580 -> set_cursor_to_pos,
     );
 
     // Patch frametime to make physics consistent
@@ -501,6 +572,8 @@ pub fn enable_hooks() {
         GetMouseDeltaPos,
         drawScreen,
         MiddleOfDrawing,
+        WindowProcCallback,
+        SetCursorToPos,
     );
 
     if !success {
@@ -521,7 +594,9 @@ pub fn disable_hooks() {
         IsKeyPressed,
         GetMouseDeltaPos,
         drawScreen,
-        MiddleOfDrawing
+        MiddleOfDrawing,
+        WindowProcCallback,
+        SetCursorToPos,
     );
 
     if !success {
