@@ -102,7 +102,9 @@ impl TasPlayer {
         self.script = match std::fs::read_to_string("./tas/".to_string() + file) {
             Err(err) => {
                 error!("{err}");
-                self.send.send(TasToControllerMessage::ParseErrors(vec![err.to_string()])).unwrap();
+                self.send
+                    .send(TasToControllerMessage::ParseErrors(vec![err.to_string()]))
+                    .unwrap();
                 None
             }
             Ok(src) => match Script::get_parser().parse(src) {
@@ -117,16 +119,16 @@ impl TasPlayer {
                         .unwrap();
                     None
                 }
-                Ok(mut script) => {
-                    match script.pre_process() {
+                Ok(mut script) => match script.pre_process() {
                         Ok(_) => Some(script),
                         Err(err) => {
                             error!("Parse error: {err}");
-                            self.send.send(TasToControllerMessage::ParseErrors(vec![err])).unwrap();
+                        self.send
+                            .send(TasToControllerMessage::ParseErrors(vec![err]))
+                            .unwrap();
                             None
-                        }
                     }
-                }
+                },
             },
         };
 
@@ -179,16 +181,18 @@ impl TasPlayer {
             })
             .unwrap();
 
-        self.send.send(TasToControllerMessage::PlaybackState(self.get_playback_state())).unwrap();
+        self.send
+            .send(TasToControllerMessage::PlaybackState(
+                self.get_playback_state(),
+            ))
+            .unwrap();
 
         // If we are not running, exit
         if self.state == PlaybackState::Stopped {
             return None;
         }
 
-        let Some(script) = &self.script else {
-            return None;
-        };
+        let script = self.script.as_ref()?;
 
         if self.next_line >= script.lines.len() {
             self.stop();

@@ -82,7 +82,7 @@ pub fn server_thread(
 }
 
 /// Connect to a tas server
-/// 
+///
 /// Fail as soon as the stream dies (aka the game closed)
 pub fn client_thread(
     sender: Sender<TasToControllerMessage>,
@@ -98,7 +98,7 @@ pub fn client_thread(
             let json = serde_json::to_string(&msg).unwrap();
             if let Err(err) = stream_copy.write_all(json.as_bytes()) {
                 error!("Error while sending message to server: {err}");
-                return
+                return;
             }
         }
     });
@@ -106,7 +106,7 @@ pub fn client_thread(
     // Attempt to get messages
     for msg in serde_json::Deserializer::from_reader(stream.try_clone().unwrap()).into_iter() {
         sender.send(msg?).unwrap();
-    };
+    }
 
     Ok(())
 }

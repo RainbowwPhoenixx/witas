@@ -50,7 +50,9 @@ impl Script {
                     .map(|(_, str)| StartType::Save(String::from_iter(str)))),
         );
 
-        let tick = just('+').or_not().then(text::int(10));
+        let tick = just('+')
+            .or_not()
+            .then(text::int(10).map(|s: String| s.parse().unwrap()));
 
         let key = one_of("UuDdLlRrSsPp");
 
@@ -75,7 +77,7 @@ impl Script {
             .then_ignore(text::newline())
             .map(|(((is_relative, tick), keys), mouse)| ScriptLine {
                 relative: is_relative.is_some(),
-                tick: tick.parse().unwrap(),
+                tick,
                 keys,
                 mouse,
             });
@@ -100,12 +102,10 @@ impl Script {
 
     /// Performs additionnal checks on the script.
     pub fn pre_process(&mut self) -> Result<(), String> {
-
         // Check version
         if self.version != 0 {
             return Err(format!("Invalid version {}", self.version));
         }
-
 
         // Set all relative ticks to absolute and check
         // that they are increasing

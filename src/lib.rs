@@ -2,17 +2,17 @@ use core::time;
 
 use tracing::info;
 
+pub mod communication;
 pub mod hooks;
 pub mod script;
 pub mod tas_player;
 pub mod witness;
-pub mod communication;
 
 #[ctor::ctor]
 fn main() {
     if let Some(arg) = std::env::args().nth(1) {
         if arg == "witness64_d3d11.exe" {
-            std::thread::spawn(|| setup());
+            std::thread::spawn(setup);
         }
     }
 }
@@ -20,7 +20,7 @@ fn main() {
 fn setup() {
     std::thread::sleep(time::Duration::from_secs(1));
 
-    let file_appender = tracing_appender::rolling::never(".", format!("witness_tas.log"));
+    let file_appender = tracing_appender::rolling::never(".", "witness_tas.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     tracing_subscriber::fmt()

@@ -103,11 +103,16 @@ impl App for TasInterface {
                     .add_enabled(play_button_enabled, egui::Button::new("Play"))
                     .clicked()
                 {
-                    self.to_server.send(ControllerToTasMessage::PlayFile(self.filename.clone())).unwrap();
+                    self.to_server
+                        .send(ControllerToTasMessage::PlayFile(self.filename.clone()))
+                        .unwrap();
                 }
 
                 let stop_button_enabled = self.playback_state != PlaybackState::Stopped;
-                if ui.add_enabled(stop_button_enabled, egui::Button::new("Stop")).clicked() {
+                if ui
+                    .add_enabled(stop_button_enabled, egui::Button::new("Stop"))
+                    .clicked()
+                {
                     self.to_server.send(ControllerToTasMessage::Stop).unwrap();
                 }
 
@@ -122,7 +127,9 @@ impl App for TasInterface {
                 };
 
                 if frame_button.clicked() {
-                    self.to_server.send(ControllerToTasMessage::AdvanceFrame).unwrap();
+                    self.to_server
+                        .send(ControllerToTasMessage::AdvanceFrame)
+                        .unwrap();
                 }
             });
 

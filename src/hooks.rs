@@ -83,21 +83,29 @@ impl<'a, T: Copy> PointerChain<'a, T> {
         Self(chain, PhantomData)
     }
 
-    fn resolve_addr(&self) -> usize {
+    unsafe fn resolve_addr(&self) -> usize {
         let mut addr = self.0[0];
         for offset in &self.0[1..] {
-            addr = unsafe { *(addr as *const _) };
+            addr = *(addr as *const _);
             addr += offset;
         }
         addr
     }
 
+    /// Resolve the pointer chain and return the value
+    ///
+    /// # Safety
+    /// This function is unsafe because it manipulates raw pointers
     pub unsafe fn read(&self) -> T {
         let addr = self.resolve_addr();
 
-        std::mem::transmute(*(addr as *const T))
+        *(addr as *const T)
     }
 
+    /// Resolve the pointer chain and write the new
+    ///
+    /// # Safety
+    /// This function is unsafe because it manipulates raw pointers
     pub unsafe fn write(&self, value: T) {
         let addr = self.resolve_addr();
 
@@ -277,7 +285,7 @@ fn execute_tas_inputs() {
                 };
             }
         },
-        _ => {}
+        _ => error!("Failed to execute TAS inputs."),
     }
 }
 
@@ -350,18 +358,10 @@ fn handle_keyboard_input(
     virtual_keycode: u32,
     scan_code: u32,
 ) -> u64 {
-    // info!(
-    //     ri_key_break,
-    //     ri_key_e0, press_down, virtual_keycode, scan_code
-    // );
-
     if virtual_keycode == VirtualKeyCode::P as u32 && press_down == 1 {
         unsafe {
-            let mut tas_player = TAS_PLAYER.lock().unwrap();
-
-            match tas_player.as_mut() {
-                Some(tas_player) => tas_player.start(None),
-                None => {}
+            if let Some(tas_player) = TAS_PLAYER.lock().unwrap().as_mut() {
+                tas_player.start(None)
             }
         }
     }
@@ -492,7 +492,7 @@ fn window_proc_callback(idc: usize, msg: u32, wparam: u64, lparam: u64) -> usize
 fn set_cursor_to_pos(idk: u64, x: u32, y: u32) {
     // When tabbed out, dont grab cursor
     if unsafe { TABBED_OUT } {
-        return
+        return;
     }
 
     unsafe { SetCursorToPos.call(idk, x, y) }
@@ -503,10 +503,13 @@ fn set_cursor_to_pos(idk: u64, x: u32, y: u32) {
 // ------------------------------------------------------------------------------------
 
 pub fn init_hooks() {
-    // Make sure the memory is initialized (when this runs, wine has not yet put the game exe in memory)
+    // Make sure the memory is initialized (when this first runs, wine may not yet have put the game exe in memory)
     debug!("Waiting for wine to put the executable in memory.");
     let addr = 0x1401e5120 as *const u8;
     let raw_mem: &[u8] = unsafe { std::slice::from_raw_parts(addr, 10) };
+
+    // This is not an infinite loop because the game itself writes stuff there
+    #[allow(clippy::while_immutable_condition)]
     while raw_mem[0] == 0 {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
@@ -518,7 +521,7 @@ pub fn init_hooks() {
         unreachable!()
     }
 
-    let placeholder_0arg = || placeholder();
+    let placeholder_0arg = placeholder;
     let placeholder_4arg = |_, _, _, _| placeholder();
 
     // Init the hooks
