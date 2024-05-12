@@ -1,6 +1,8 @@
+#![feature(panic_update_hook)]
+
 use core::time;
 
-use tracing::info;
+use tracing::{error, info};
 
 pub mod communication;
 pub mod hooks;
@@ -39,6 +41,16 @@ fn setup() {
     hooks::init_hooks();
     hooks::enable_hooks();
     tas_player::TasPlayer::init();
+
+    std::panic::update_hook(move |prev, info| {
+        if let Some(location) = info.location() {
+            error!("TAS tool panicked in file {} at line {}: {info}", location.file(), location.line());
+        } else {
+            error!("TAS tool panicked: {info}")
+        }
+
+        prev(info)
+    });
 
     info!("Initialiser thread done.");
 }
