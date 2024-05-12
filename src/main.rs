@@ -1,8 +1,17 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use eframe::{run_native, App};
+use egui::Ui;
 use witness_tas::communication::{client_thread, ControllerToTasMessage, TasToControllerMessage};
-use witness_tas::tas_player::PlaybackState;
+use witness_tas::tas_player::{PlaybackState, TraceDrawOption};
+
+#[derive(PartialEq)]
+enum TasInterfaceTab {
+    Playback,
+    Trace,
+    Config,
+    About,
+}
 
 struct TasInterface {
     // Communication with the tas player
@@ -13,12 +22,21 @@ struct TasInterface {
     filename: String,
     playback_state: PlaybackState,
     skipto: u32,
+    looping: bool,
 
     // Info
     player_pos: (f32, f32, f32), // Replace with vec3
     player_ang: (f32, f32),      // Replace with vec2
     current_tick: u32,
     parse_errors: Vec<String>,
+
+    // Trace
+    trace_selected_tick: u32,
+    trace_continuous_teleport: bool,
+    trace_display_opts: TraceDrawOption,
+
+    // Interface state
+    current_tab: TasInterfaceTab,
 }
 
 impl TasInterface {
@@ -33,10 +51,15 @@ impl TasInterface {
             filename: "example.wtas".to_string(),
             playback_state: PlaybackState::Stopped,
             skipto: 0,
+            looping: false,
             player_pos: (0., 0., 0.),
             player_ang: (0., 0.),
             current_tick: 0,
             parse_errors: vec![],
+            trace_selected_tick: 0,
+            trace_continuous_teleport: false,
+            trace_display_opts: Default::default(),
+            current_tab: TasInterfaceTab::Playback,
         }
     }
 
@@ -49,6 +72,9 @@ impl TasInterface {
         self.from_server = from_server;
 
         // TODO: resend info to server
+        self.to_server
+            .send(ControllerToTasMessage::SkipTo(self.skipto))
+            .unwrap();
     }
 
     fn update_from_server(&mut self) {
@@ -90,13 +116,66 @@ impl App for TasInterface {
                 return;
             }
 
-            ui.heading("Playback control");
+            // Info is always there
+            self.info(ui);
+            ui.add(egui::Separator::default().grow(10.));
+
+            // Draw the tabs
             ui.horizontal(|ui| {
-                let label = ui.label("TAS file");
-                ui.text_edit_singleline(&mut self.filename)
-                    .labelled_by(label.id)
+                ui.selectable_value(&mut self.current_tab, TasInterfaceTab::Playback, "Playback");
+                ui.selectable_value(&mut self.current_tab, TasInterfaceTab::Trace, "Trace");
+                ui.selectable_value(&mut self.current_tab, TasInterfaceTab::Config, "Config");
+                ui.selectable_value(&mut self.current_tab, TasInterfaceTab::About, "About");
             });
-            ui.horizontal(|ui| {
+
+            ui.separator();
+
+            // Draw the selected tab
+            match self.current_tab {
+                TasInterfaceTab::Playback => self.playback_controls_tab(ui),
+                TasInterfaceTab::Trace => self.trace_controls_tab(ui),
+                TasInterfaceTab::Config => self.config_tab(ui),
+                TasInterfaceTab::About => self.about_tab(ui),
+            }
+        });
+
+        ctx.request_repaint();
+    }
+}
+
+impl TasInterface {
+    /// Draw the info section
+    fn info(&mut self, ui: &mut Ui) {
+        ui.heading("Info");
+        ui.label(format!(
+            "pos: {:4.3} {:4.3} {:4.3}",
+            self.player_pos.0, self.player_pos.1, self.player_pos.2
+        ));
+        ui.label(format!(
+            "ang: {:1.3} {:1.3}",
+            self.player_ang.0, self.player_ang.1
+        ));
+        ui.label(format!("Current tick: {}", self.current_tick));
+
+        if !self.parse_errors.is_empty() {
+            ui.heading("Parse errors");
+            for error in &self.parse_errors {
+                ui.label(error);
+            }
+        }
+    }
+
+    /// Draw the playback controls
+    fn playback_controls_tab(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            let label = ui.label("TAS file");
+            ui.text_edit_singleline(&mut self.filename)
+                .labelled_by(label.id)
+        });
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut self.looping, "Loop TAS");
+
+            if !self.looping {
                 let play_button_enabled = self.playback_state == PlaybackState::Stopped
                     || self.playback_state == PlaybackState::Paused;
                 if ui
@@ -131,45 +210,131 @@ impl App for TasInterface {
                         .send(ControllerToTasMessage::AdvanceFrame)
                         .unwrap();
                 }
-            });
+            }
+        });
 
-            ui.horizontal(|ui| {
-                let label = ui.label("Skip to tick: ");
-                let skipto = ui
-                    .add(egui::DragValue::new(&mut self.skipto))
-                    .labelled_by(label.id);
+        ui.horizontal(|ui| {
+            let skip_label = ui.label("Skip to tick: ");
+            let skipto = ui
+                .add(egui::DragValue::new(&mut self.skipto))
+                .labelled_by(skip_label.id);
 
-                if skipto.changed() {
-                    match self
-                        .to_server
-                        .send(ControllerToTasMessage::SkipTo(self.skipto))
-                    {
-                        Ok(_) => {}
-                        Err(err) => println!("{err}"),
-                    }
-                }
-            });
-
-            ui.heading("Info");
-            ui.label(format!(
-                "pos: {:4.3} {:4.3} {:4.3}",
-                self.player_pos.0, self.player_pos.1, self.player_pos.2
-            ));
-            ui.label(format!(
-                "ang: {:1.3} {:1.3}",
-                self.player_ang.0, self.player_ang.1
-            ));
-            ui.label(format!("Current tick: {}", self.current_tick));
-
-            if !self.parse_errors.is_empty() {
-                ui.heading("Parse errors");
-                for error in &self.parse_errors {
-                    ui.label(error);
+            if skipto.changed() {
+                match self
+                    .to_server
+                    .send(ControllerToTasMessage::SkipTo(self.skipto))
+                {
+                    Ok(_) => {}
+                    Err(err) => println!("{err}"),
                 }
             }
         });
 
-        ctx.request_repaint();
+        if self.looping
+            && self.playback_state != PlaybackState::Playing
+            && self.playback_state != PlaybackState::Skipping
+        {
+            self.to_server
+                .send(ControllerToTasMessage::PlayFile(self.filename.clone()))
+                .unwrap();
+        }
+    }
+
+    /// Draw the trace controls
+    fn trace_controls_tab(&mut self, ui: &mut Ui) {
+        ui.heading("Teleport");
+
+        ui.horizontal(|ui| {
+            let label = ui.label("Selected tick: ");
+            let dragvalue = ui
+                .add(egui::DragValue::new(&mut self.trace_selected_tick))
+                .labelled_by(label.id);
+
+            if ui
+                .add_enabled(
+                    !self.trace_continuous_teleport,
+                    egui::Button::new("Teleport"),
+                )
+                .clicked()
+            {
+                self.to_server
+                    .send(ControllerToTasMessage::TeleportToTick(
+                        self.trace_selected_tick,
+                    ))
+                    .unwrap();
+            }
+
+            ui.checkbox(&mut self.trace_continuous_teleport, "Continuous");
+
+            // Teleport without completely spamming
+            if self.trace_continuous_teleport && dragvalue.changed() {
+                self.to_server
+                    .send(ControllerToTasMessage::TeleportToTick(
+                        self.trace_selected_tick,
+                    ))
+                    .unwrap();
+            }
+        });
+
+        ui.heading("Display");
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_label("")
+                .selected_text(format!("{}", self.trace_display_opts.variant_name_simple()))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.trace_display_opts,
+                        TraceDrawOption::First(0),
+                        "First",
+                    );
+                    ui.selectable_value(
+                        &mut self.trace_display_opts,
+                        TraceDrawOption::Last(0),
+                        "Last",
+                    );
+                    ui.selectable_value(
+                        &mut self.trace_display_opts,
+                        TraceDrawOption::Between(0, 0),
+                        "Between",
+                    );
+                });
+
+            let mut trace_opt_changed = false;
+            match self.trace_display_opts {
+                TraceDrawOption::First(mut from_start) => {
+                    if ui.add(egui::DragValue::new(&mut from_start)).changed() {
+                        self.trace_display_opts = TraceDrawOption::First(from_start);
+                        trace_opt_changed = true;
+                    }
+                }
+                TraceDrawOption::Last(mut from_end) => {
+                    if ui.add(egui::DragValue::new(&mut from_end)).changed() {
+                        self.trace_display_opts = TraceDrawOption::Last(from_end);
+                        trace_opt_changed = true;
+                    }
+                }
+                TraceDrawOption::Between(mut start, mut end) => {
+                    if ui.add(egui::DragValue::new(&mut start)).changed() {
+                        self.trace_display_opts = TraceDrawOption::Between(start, end);
+                        trace_opt_changed = true;
+                    }
+                    if ui.add(egui::DragValue::new(&mut end)).changed() || end < start {
+                        self.trace_display_opts = TraceDrawOption::Between(start, end.max(start));
+                        trace_opt_changed = true;
+                    }
+                }
+            };
+            ui.label("ticks");
+
+            if trace_opt_changed {
+                self.to_server.send(ControllerToTasMessage::TraceOptions(self.trace_display_opts)).unwrap();
+            }
+        });
+    }
+    fn config_tab(&mut self, ui: &mut Ui) {
+        ui.label("Under Construction");
+    }
+    fn about_tab(&mut self, ui: &mut Ui) {
+        ui.label("Under Construction");
     }
 }
 

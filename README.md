@@ -7,6 +7,7 @@
 - A simple GUI to:
     - Control TAS playback (Play, Stop, Fast-Forward)
     - Some information like current playback tick and player pos/angles
+    - Various other configuration/tools
 
 ### Additionnal features
 - During TAS playback, the player position is recorded and the displayed physically in the world with little spheres
@@ -23,12 +24,14 @@
 - Puzzle solving hud for snipes, to help you see what you're doing
 - Scan instead of adresses
 - Windows support, with automatic DLL injection when opening GUI
-- More stuff for the GUI (with tabs to sort this stuff):
-    - configutable TAS folder (currently forced to "game dir/tas")
-    - Trace options (how many points to display, etc)
-    - Teleport to specific trace points
+- More stuff for the GUI:
+    - Config stuff:
+        - TAS folder (currently forced to "game dir/tas")
+        - number of decimals in the pos/ang display
     - "About" tab with version, etc
-
+- Freecam, to watch the TAS from any world point (useful to watch a panel while tasing a snipe)
+- Make trace a different color when in solve mode
+- Add looping to make the tas play on a loop
 
 ## Todo
 - Document the script format

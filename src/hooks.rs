@@ -152,9 +152,9 @@ pub static DEBUG_SHOW_EPS: PointerChain<bool> = PointerChain::new(&[0x140630410]
 pub static FRAMETIME: PointerChain<f64> = PointerChain::new(&[0x1406211d8]);
 pub static PLAYER: PointerChain<Entity> = PointerChain::new(&[0x14062d0a0, 0x18, 0x1E465 * 8, 0x0]);
 pub static NOCLIP: PointerChain<bool> = PointerChain::new(&[0x14062d5b8]);
-pub static CAMERA_POS: PointerChain<Vec3> =
+pub static PLAYER_POS: PointerChain<Vec3> =
     PointerChain::new(&[0x14062d0a0, 0x18, 0x1E465 * 8, 0x24]);
-pub static CAMERA_ANG: PointerChain<Vec2> = PointerChain::new(&[0x1406303ec]);
+pub static PLAYER_ANG: PointerChain<Vec2> = PointerChain::new(&[0x1406303ec]);
 
 static mut SAVED_CAM_POS: Option<Vec3> = None;
 static mut SAVED_CAM_ANG: Option<Vec2> = None;
@@ -372,16 +372,16 @@ fn handle_keyboard_input(
 
     if virtual_keycode == VirtualKeyCode::J as u32 && press_down == 1 {
         unsafe {
-            SAVED_CAM_POS = Some(CAMERA_POS.read());
-            SAVED_CAM_ANG = Some(CAMERA_ANG.read());
+            SAVED_CAM_POS = Some(PLAYER_POS.read());
+            SAVED_CAM_ANG = Some(PLAYER_ANG.read());
         };
         info!("Saved camera pos")
     }
     if virtual_keycode == VirtualKeyCode::K as u32 && press_down == 1 {
         unsafe {
             if let (Some(pos), Some(ang)) = (SAVED_CAM_POS, SAVED_CAM_ANG) {
-                CAMERA_POS.write(pos);
-                CAMERA_ANG.write(ang);
+                PLAYER_POS.write(pos);
+                PLAYER_ANG.write(ang);
             }
         };
     }
@@ -470,7 +470,7 @@ fn middle_of_drawing(param1: usize, param2: usize) {
 
         if let Ok(player) = TAS_PLAYER.lock() {
             if let Some(player) = player.as_ref() {
-                for &pos in &player.trace.positions {
+                for &pos in player.trace.get_pos_to_show() {
                     drawSphere.call(addr_of!(pos), 0.05, color, false);
                 }
             }

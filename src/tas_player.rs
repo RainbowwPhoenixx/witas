@@ -1,8 +1,9 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::{collections::VecDeque, sync::Mutex};
+use std::sync::Mutex;
 
 use crate::communication::{server_thread, ControllerToTasMessage, TasToControllerMessage};
-use crate::hooks::CAMERA_ANG;
+use crate::hooks::{PLAYER_ANG, PLAYER_POS};
+use crate::witness::witness_types::Vec2;
 use crate::{
     hooks::{DoRestart, MAIN_LOOP_COUNT, NEW_GAME_FLAG, PLAYER},
     script::{self, Script, StartType},
@@ -123,13 +124,13 @@ impl TasPlayer {
                     None
                 }
                 Ok(mut script) => match script.pre_process() {
-                        Ok(_) => Some(script),
-                        Err(err) => {
-                            error!("Parse error: {err}");
+                    Ok(_) => Some(script),
+                    Err(err) => {
+                        error!("Parse error: {err}");
                         self.send
                             .send(TasToControllerMessage::ParseErrors(vec![err]))
                             .unwrap();
-                            None
+                        None
                     }
                 },
             },
@@ -176,7 +177,7 @@ impl TasPlayer {
 
         // Update the controller
         let pos = unsafe { PLAYER.read().position };
-        let ang = unsafe { CAMERA_ANG.read() };
+        let ang = unsafe { PLAYER_ANG.read() };
         self.send
             .send(TasToControllerMessage::CarlInfo {
                 pos: (pos.x, pos.y, pos.z),
@@ -211,7 +212,7 @@ impl TasPlayer {
                 .unwrap();
 
             // Update the player pos history
-            self.trace.push(unsafe { PLAYER.read().position });
+            unsafe { self.trace.push(PLAYER.read().position, PLAYER_ANG.read()) };
 
             self.current_tick = current_tick;
             let next_line = &script.lines[self.next_line];
@@ -266,16 +267,24 @@ impl TasPlayer {
     fn update_from_server(&mut self) {
         // We're using a loop and not try_iter here because the borrow checker
         // doesn't like it
-        loop  {
-        let Ok(msg) = self.recv.try_recv() else {
-            return;
-        };
+        loop {
+            let Ok(msg) = self.recv.try_recv() else {
+                return;
+            };
 
-        match msg {
-            ControllerToTasMessage::PlayFile(filename) => self.start(Some(filename)),
-            ControllerToTasMessage::Stop => self.stop(),
-            ControllerToTasMessage::SkipTo(tick) => self.skipto_tick = tick,
-            ControllerToTasMessage::AdvanceFrame => error!("Frame by frame is not implemented yet"),
+            match msg {
+                ControllerToTasMessage::PlayFile(filename) => self.start(Some(filename)),
+                ControllerToTasMessage::Stop => self.stop(),
+                ControllerToTasMessage::SkipTo(tick) => self.skipto_tick = tick,
+                ControllerToTasMessage::AdvanceFrame => {
+                    error!("Frame by frame is not implemented yet")
+                }
+                ControllerToTasMessage::TeleportToTick(tick) => {
+                    if self.state == PlaybackState::Stopped {
+                        self.trace.teleport_tick(tick);
+                    }
+                }
+                ControllerToTasMessage::TraceOptions(opt) => self.trace.draw_option = opt,
             }
         }
     }
@@ -300,13 +309,73 @@ impl TasPlayer {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum TraceDrawOption {
+    First(u32),
+    Last(u32),
+    Between(u32, u32),
+}
+
+impl TraceDrawOption {
+    pub fn variant_name_simple(&self) -> &str {
+        match self {
+            TraceDrawOption::First(_) => "First",
+            TraceDrawOption::Last(_) => "Last",
+            TraceDrawOption::Between(_, _) => "Between",
+        }
+    }
+}
+
+impl Default for TraceDrawOption {
+    fn default() -> Self {
+        Self::Last(100)
+    }
+}
+
 #[derive(Default)]
 pub struct Playertrace {
-    pub positions: Vec<Vec3>,
+    pub draw_option: TraceDrawOption,
+    positions: Vec<Vec3>,
+    angles: Vec<Vec2>,
 }
 
 impl Playertrace {
     pub fn clear(&mut self) {
-        self.positions.clear()
+        self.positions.clear();
+        self.angles.clear();
+    }
+
+    pub fn push(&mut self, pos: Vec3, ang: Vec2) {
+        self.positions.push(pos);
+        self.angles.push(ang);
+    }
+
+    /// Return the list of positions to display in-world
+    pub fn get_pos_to_show(&self) -> &[Vec3] {
+
+        let (start, end) = match self.draw_option {
+            TraceDrawOption::First(from_start) => (0, from_start as usize),
+            TraceDrawOption::Last(from_end) => (self.positions.len().saturating_sub(from_end as usize), self.positions.len()),
+            TraceDrawOption::Between(start, end) => (start as usize, end as usize),
+        };
+
+        let end = end.min(self.positions.len());
+        if (start..end).len() == 0 {
+            return &[];
+        }
+        &self.positions[start..end]
+    }
+
+    /// Teleport player to the given tick
+    pub fn teleport_tick(&self, tick: u32) -> Option<()> {
+        let &pos = self.positions.get(tick as usize)?;
+        let &ang = self.angles.get(tick as usize)?;
+
+        unsafe {
+            PLAYER_POS.write(pos);
+            PLAYER_ANG.write(ang);
+        };
+
+        Some(())
     }
 }
