@@ -264,6 +264,9 @@ impl TasPlayer {
     }
 
     fn update_from_server(&mut self) {
+        // We're using a loop and not try_iter here because the borrow checker
+        // doesn't like it
+        loop  {
         let Ok(msg) = self.recv.try_recv() else {
             return;
         };
@@ -273,6 +276,7 @@ impl TasPlayer {
             ControllerToTasMessage::Stop => self.stop(),
             ControllerToTasMessage::SkipTo(tick) => self.skipto_tick = tick,
             ControllerToTasMessage::AdvanceFrame => error!("Frame by frame is not implemented yet"),
+            }
         }
     }
 
