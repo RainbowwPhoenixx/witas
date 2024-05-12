@@ -95,11 +95,14 @@ impl TasPlayer {
 
     /// Starts the TAS
     /// If file is None, replay the current tas
-    pub fn start(&mut self, file: Option<&String>) {
+    pub fn start(&mut self, file: Option<String>) {
         self.stop();
 
-        let file = file.unwrap_or(&self.script_name);
-        self.script = match std::fs::read_to_string("./tas/".to_string() + file) {
+        if let Some(file) = file {
+            self.script_name = file;
+        }
+
+        self.script = match std::fs::read_to_string("./tas/".to_string() + &self.script_name) {
             Err(err) => {
                 error!("{err}");
                 self.send
@@ -266,7 +269,7 @@ impl TasPlayer {
         };
 
         match msg {
-            ControllerToTasMessage::PlayFile(filename) => self.start(Some(&filename)),
+            ControllerToTasMessage::PlayFile(filename) => self.start(Some(filename)),
             ControllerToTasMessage::Stop => self.stop(),
             ControllerToTasMessage::SkipTo(tick) => self.skipto_tick = tick,
             ControllerToTasMessage::AdvanceFrame => error!("Frame by frame is not implemented yet"),
@@ -274,14 +277,14 @@ impl TasPlayer {
     }
 
     pub fn should_do_skipping(&self) -> bool {
-        // Only skip after 120 frames, the "eyes opening" animation fucks things up
-        self.state != PlaybackState::Stopped
+        // Only skip after 60 frames, the "eyes opening" animation fucks things up
+        self.state == PlaybackState::Playing
             && self.current_tick < self.skipto_tick
             && self.current_tick > 60
     }
 
     pub fn get_playback_state(&self) -> PlaybackState {
-        if self.current_tick < self.skipto_tick {
+        if self.state == PlaybackState::Playing && self.current_tick < self.skipto_tick {
             PlaybackState::Skipping
         } else {
             self.state
