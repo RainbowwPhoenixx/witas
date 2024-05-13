@@ -5,19 +5,19 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::tas_player::{PlaybackState, TraceDrawOption};
+use crate::tas_player::{PlaybackState, TraceDrawOptions};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub enum ControllerToTasMessage {
     PlayFile(String),
     Stop,
     SkipTo(u32),
     AdvanceFrame,
     TeleportToTick(u32),
-    TraceOptions(TraceDrawOption),
+    TraceOptions(TraceDrawOptions),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub enum TasToControllerMessage {
     PlaybackState(PlaybackState),
     CurrentTick(u32),

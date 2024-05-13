@@ -3,7 +3,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use eframe::{run_native, App};
 use egui::Ui;
 use witness_tas::communication::{client_thread, ControllerToTasMessage, TasToControllerMessage};
-use witness_tas::tas_player::{PlaybackState, TraceDrawOption};
+use witness_tas::tas_player::{PlaybackState, TraceDrawOptions, TraceInterval};
 
 #[derive(PartialEq)]
 enum TasInterfaceTab {
@@ -33,7 +33,7 @@ struct TasInterface {
     // Trace
     trace_selected_tick: u32,
     trace_continuous_teleport: bool,
-    trace_display_opts: TraceDrawOption,
+    trace_display_opts: TraceDrawOptions,
 
     // Interface state
     current_tab: TasInterfaceTab,
@@ -168,14 +168,10 @@ impl TasInterface {
     /// Draw the playback controls
     fn playback_controls_tab(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            let label = ui.label("TAS file");
-            ui.text_edit_singleline(&mut self.filename)
-                .labelled_by(label.id)
-        });
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut self.looping, "Loop TAS");
+            ui.checkbox(&mut self.looping, "Loop mode");
 
             if !self.looping {
+                ui.separator();
                 let play_button_enabled = self.playback_state == PlaybackState::Stopped
                     || self.playback_state == PlaybackState::Paused;
                 if ui
@@ -230,6 +226,14 @@ impl TasInterface {
             }
         });
 
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            ui.horizontal(|ui| {
+                let label = ui.label("File:");
+                ui.text_edit_singleline(&mut self.filename)
+                    .labelled_by(label.id)
+            });
+        });
+
         if self.looping
             && self.playback_state != PlaybackState::Playing
             && self.playback_state != PlaybackState::Skipping
@@ -276,49 +280,56 @@ impl TasInterface {
             }
         });
 
-        ui.heading("Display");
+        ui.horizontal(|ui| {
+            ui.heading("Display");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {})
+        });
         ui.horizontal(|ui| {
             egui::ComboBox::from_label("")
-                .selected_text(format!("{}", self.trace_display_opts.variant_name_simple()))
+                .selected_text(format!(
+                    "{}",
+                    self.trace_display_opts.interval.variant_name_simple()
+                ))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
-                        &mut self.trace_display_opts,
-                        TraceDrawOption::First(0),
+                        &mut self.trace_display_opts.interval,
+                        TraceInterval::First(0),
                         "First",
                     );
                     ui.selectable_value(
-                        &mut self.trace_display_opts,
-                        TraceDrawOption::Last(0),
+                        &mut self.trace_display_opts.interval,
+                        TraceInterval::Last(0),
                         "Last",
                     );
                     ui.selectable_value(
-                        &mut self.trace_display_opts,
-                        TraceDrawOption::Between(0, 0),
+                        &mut self.trace_display_opts.interval,
+                        TraceInterval::Between(0, 0),
                         "Between",
                     );
                 });
 
             let mut trace_opt_changed = false;
-            match self.trace_display_opts {
-                TraceDrawOption::First(mut from_start) => {
+            match self.trace_display_opts.interval {
+                TraceInterval::First(mut from_start) => {
                     if ui.add(egui::DragValue::new(&mut from_start)).changed() {
-                        self.trace_display_opts = TraceDrawOption::First(from_start);
+                        self.trace_display_opts.interval = TraceInterval::First(from_start);
                         trace_opt_changed = true;
                     }
                 }
-                TraceDrawOption::Last(mut from_end) => {
+                TraceInterval::Last(mut from_end) => {
                     if ui.add(egui::DragValue::new(&mut from_end)).changed() {
-                        self.trace_display_opts = TraceDrawOption::Last(from_end);
+                        self.trace_display_opts.interval = TraceInterval::Last(from_end);
                         trace_opt_changed = true;
                     }
                 }
-                TraceDrawOption::Between(mut start, mut end) => {
+                TraceInterval::Between(mut start, mut end) => {
                     if ui.add(egui::DragValue::new(&mut start)).changed() {
-                        self.trace_display_opts = TraceDrawOption::Between(start, end);
+                        self.trace_display_opts.interval = TraceInterval::Between(start, end);
                         trace_opt_changed = true;
                     }
                     if ui.add(egui::DragValue::new(&mut end)).changed() || end < start {
-                        self.trace_display_opts = TraceDrawOption::Between(start, end.max(start));
+                        self.trace_display_opts.interval =
+                            TraceInterval::Between(start, end.max(start));
                         trace_opt_changed = true;
                     }
                 }
@@ -326,9 +337,34 @@ impl TasInterface {
             ui.label("ticks");
 
             if trace_opt_changed {
-                self.to_server.send(ControllerToTasMessage::TraceOptions(self.trace_display_opts)).unwrap();
+                self.to_server
+                    .send(ControllerToTasMessage::TraceOptions(
+                        self.trace_display_opts,
+                    ))
+                    .unwrap();
             }
         });
+
+        let radius = ui.add(
+            egui::Slider::new(&mut self.trace_display_opts.sphere_radius, 0.005..=0.08)
+                .text("radius"),
+        );
+        let z_off = ui.add(
+            egui::Slider::new(&mut self.trace_display_opts.z_offset, -1.0..=1.0).text("z offset"),
+        );
+
+        let reset_defaults = ui.button("Reset defaults").clicked();
+        if reset_defaults {
+            self.trace_display_opts = Default::default();
+        }
+
+        if radius.changed() || z_off.changed() || reset_defaults {
+            self.to_server
+                .send(ControllerToTasMessage::TraceOptions(
+                    self.trace_display_opts,
+                ))
+                .unwrap();
+        }
     }
     fn config_tab(&mut self, ui: &mut Ui) {
         ui.label("Under Construction");
@@ -340,7 +376,7 @@ impl TasInterface {
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 300.0]),
         ..Default::default()
     };
 

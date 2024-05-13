@@ -2,8 +2,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Mutex;
 
 use crate::communication::{server_thread, ControllerToTasMessage, TasToControllerMessage};
-use crate::hooks::{PLAYER_ANG, PLAYER_POS};
-use crate::witness::witness_types::Vec2;
+use crate::hooks::{INTERACTION_STATUS, PLAYER_ANG, PLAYER_POS};
+use crate::witness::witness_types::{InteractionStatus, Vec2};
 use crate::{
     hooks::{DoRestart, MAIN_LOOP_COUNT, NEW_GAME_FLAG, PLAYER},
     script::{self, Script, StartType},
@@ -212,7 +212,13 @@ impl TasPlayer {
                 .unwrap();
 
             // Update the player pos history
-            unsafe { self.trace.push(PLAYER.read().position, PLAYER_ANG.read()) };
+            unsafe {
+                self.trace.push(
+                    PLAYER.read().position,
+                    PLAYER_ANG.read(),
+                    INTERACTION_STATUS.read().try_into().unwrap(),
+                )
+            };
 
             self.current_tick = current_tick;
             let next_line = &script.lines[self.next_line];
@@ -310,70 +316,92 @@ impl TasPlayer {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum TraceDrawOption {
+pub enum TraceInterval {
     First(u32),
     Last(u32),
     Between(u32, u32),
 }
 
-impl TraceDrawOption {
+impl TraceInterval {
     pub fn variant_name_simple(&self) -> &str {
         match self {
-            TraceDrawOption::First(_) => "First",
-            TraceDrawOption::Last(_) => "Last",
-            TraceDrawOption::Between(_, _) => "Between",
+            TraceInterval::First(_) => "First",
+            TraceInterval::Last(_) => "Last",
+            TraceInterval::Between(_, _) => "Between",
         }
     }
 }
 
-impl Default for TraceDrawOption {
+impl Default for TraceInterval {
     fn default() -> Self {
         Self::Last(100)
     }
 }
 
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct TraceDrawOptions {
+    pub sphere_radius: f32,
+    pub z_offset: f32,
+    pub interval: TraceInterval,
+}
+
+impl Default for TraceDrawOptions {
+    fn default() -> Self {
+        Self {
+            sphere_radius: 0.05,
+            z_offset: Default::default(),
+            interval: Default::default(),
+        }
+    }
+}
+
+pub struct TraceTick {
+    pub pos: Vec3,
+    pub ang: Vec2,
+    pub interact: InteractionStatus,
+}
+
 #[derive(Default)]
 pub struct Playertrace {
-    pub draw_option: TraceDrawOption,
-    positions: Vec<Vec3>,
-    angles: Vec<Vec2>,
+    pub draw_option: TraceDrawOptions,
+    ticks: Vec<TraceTick>,
 }
 
 impl Playertrace {
     pub fn clear(&mut self) {
-        self.positions.clear();
-        self.angles.clear();
+        self.ticks.clear();
     }
 
-    pub fn push(&mut self, pos: Vec3, ang: Vec2) {
-        self.positions.push(pos);
-        self.angles.push(ang);
+    /// Add a point to the trace
+    pub fn push(&mut self, pos: Vec3, ang: Vec2, interact: InteractionStatus) {
+        self.ticks.push(TraceTick { pos, ang, interact })
     }
 
     /// Return the list of positions to display in-world
-    pub fn get_pos_to_show(&self) -> &[Vec3] {
-
-        let (start, end) = match self.draw_option {
-            TraceDrawOption::First(from_start) => (0, from_start as usize),
-            TraceDrawOption::Last(from_end) => (self.positions.len().saturating_sub(from_end as usize), self.positions.len()),
-            TraceDrawOption::Between(start, end) => (start as usize, end as usize),
+    pub fn get_pos_to_show(&self) -> &[TraceTick] {
+        let (start, end) = match self.draw_option.interval {
+            TraceInterval::First(from_start) => (0, from_start as usize),
+            TraceInterval::Last(from_end) => (
+                self.ticks.len().saturating_sub(from_end as usize),
+                self.ticks.len(),
+            ),
+            TraceInterval::Between(start, end) => (start as usize, end as usize),
         };
 
-        let end = end.min(self.positions.len());
+        let end = end.min(self.ticks.len());
         if (start..end).len() == 0 {
             return &[];
         }
-        &self.positions[start..end]
+        &self.ticks[start..end]
     }
 
     /// Teleport player to the given tick
     pub fn teleport_tick(&self, tick: u32) -> Option<()> {
-        let &pos = self.positions.get(tick as usize)?;
-        let &ang = self.angles.get(tick as usize)?;
+        let tick = self.ticks.get(tick as usize)?;
 
         unsafe {
-            PLAYER_POS.write(pos);
-            PLAYER_ANG.write(ang);
+            PLAYER_POS.write(tick.pos);
+            PLAYER_ANG.write(tick.ang);
         };
 
         Some(())

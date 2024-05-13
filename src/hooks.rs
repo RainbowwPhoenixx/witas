@@ -155,6 +155,7 @@ pub static NOCLIP: PointerChain<bool> = PointerChain::new(&[0x14062d5b8]);
 pub static PLAYER_POS: PointerChain<Vec3> =
     PointerChain::new(&[0x14062d0a0, 0x18, 0x1E465 * 8, 0x24]);
 pub static PLAYER_ANG: PointerChain<Vec2> = PointerChain::new(&[0x1406303ec]);
+pub static INTERACTION_STATUS: PointerChain<u32> = PointerChain::new(&[0x14062d5c4]);
 
 static mut SAVED_CAM_POS: Option<Vec3> = None;
 static mut SAVED_CAM_ANG: Option<Vec2> = None;
@@ -461,17 +462,20 @@ fn middle_of_drawing(param1: usize, param2: usize) {
     unsafe { MiddleOfDrawing.call(param1, param2) }
 
     unsafe {
-        let color = Color {
-            r: 0.0,
-            g: 1.0,
-            b: 0.0,
-            a: 1.0,
-        };
-
         if let Ok(player) = TAS_PLAYER.lock() {
             if let Some(player) = player.as_ref() {
-                for &pos in player.trace.get_pos_to_show() {
-                    drawSphere.call(addr_of!(pos), 0.05, color, false);
+                for tick_data in player.trace.get_pos_to_show() {
+                    let color = match tick_data.interact {
+                        crate::witness::witness_types::InteractionStatus::FocusMode => Color::RED,
+                        crate::witness::witness_types::InteractionStatus::SolvingPanel => Color::PINK,
+                        crate::witness::witness_types::InteractionStatus::Walking => Color::GREEN,
+                        crate::witness::witness_types::InteractionStatus::Cinematic => Color{ r: 0.5, g: 0.5, b: 0.5, a: 0.5 },
+                    };
+
+                    let mut pos = tick_data.pos;
+                    pos.z += player.trace.draw_option.z_offset;
+
+                    drawSphere.call(addr_of!(pos), player.trace.draw_option.sphere_radius, color, false);
                 }
             }
         };
