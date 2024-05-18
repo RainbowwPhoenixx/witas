@@ -17,6 +17,28 @@
     - N: noclip toggle
     - J/K: position saving/restoring (very useful while TASing snipes)
 
+## Setting it up, usage and debugging
+### Linux
+- Build the project
+- Copy libwitness_tas.so to the game folder
+- Change the steam launch command to be `LD_PRELOAD="libwitness_tas.so" %command%`
+- Start the game and the GUI, you should be good to go
+
+### Windows
+VERY IMPORTANT NOTE: These are untested.
+- Inject witness_tas.dll into The Witness using any injector tool.
+- Start the GUI, shou should be good to go
+
+### Basic usage
+- Create a folder called "tas" in the game folder, you can place your tas scripts in there
+- Create a new file in the folder and start writing your tas
+- Play the TAS with the GUI (specify the correct filename!)
+- Edit your TAS, replay, edit, replay, etc
+
+### Troubleshooting
+The injected library produces a log file called witness_tas.log to help troubleshoot issues.
+
+
 ## Planned features
 - Frame by frame
 - Savestates
@@ -39,8 +61,26 @@
 - Handle resolution:
     - Make mouse movement independent of res?
     - Make res a parameter of the script?
+- Add vertical smoothing to the trace
+- RE:
+    - WorldToScreen function?
+    - drawing debug stuff
+    - HOW CLICK PUZZLES WHILE MOVING
 
 # Contributing
-The project is open to contributions. 
+The project is open to contributions. Here's a brief rundown of how it works.
 
-TODO: brief explanation of how it works.
+The tas tool is made up of two parts:
+- The actual TAS tool, running inside the game
+- The GUI, a separate program
+
+The first one is a library (.dll/.so) injected into the game(via dll injection on windows, and `LD_PRELOAD`ing on linux).
+Its job is to hook game functions, and instrument the game such that we can play tasses and that they are consistent
+(plus some qol stuff to help the tassing process). It also opens a websocket on localhost in order to communicate with
+a controller (in this case, the GUI).
+
+The second one allows for easy control of the TAS tool.
+
+The two components communicate with a protocol defined in src/communication.rs. Messages are serialized to json. Any
+program connecting to the socket using that protocol can make the tool run a TAS. For example, this could be used for
+a brute-forcing tool.
