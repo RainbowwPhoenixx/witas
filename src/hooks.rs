@@ -1,5 +1,6 @@
 use retour::static_detour;
 use std::ptr::addr_of;
+use std::time;
 use std::{ffi::CStr, marker::PhantomData};
 use tracing::{debug, error, info};
 use windows::Win32::UI::WindowsAndMessaging::MSG;
@@ -141,6 +142,8 @@ static_detour! {
     static MiddleOfDrawing: unsafe extern "win64" fn(usize, usize);
 
     static SetCursorToPos: unsafe extern "win64" fn(u64, u32, u32);
+
+    static PanelClickCheck: unsafe extern "win64" fn(*const u32, *const Vec3, *const Vec3, *const f32, f32, bool, u8, u8) -> usize;
 }
 
 static PTR_INPUT_STH1: PointerChain<usize> = PointerChain::new(&[0x14469a060, 0x0]);
@@ -156,6 +159,7 @@ pub static PLAYER_POS: PointerChain<Vec3> =
     PointerChain::new(&[0x14062d0a0, 0x18, 0x1E465 * 8, 0x24]);
 pub static PLAYER_ANG: PointerChain<Vec2> = PointerChain::new(&[0x1406303ec]);
 pub static INTERACTION_STATUS: PointerChain<u32> = PointerChain::new(&[0x14062d5c4]);
+pub static VERTICAL_SMOOTHING: PointerChain<f32> = PointerChain::new(&[0x140630434]);
 
 static mut SAVED_CAM_POS: Option<Vec3> = None;
 static mut SAVED_CAM_ANG: Option<Vec2> = None;
@@ -450,9 +454,15 @@ fn draw_override() {
         }
     };
 
+    let before_draw = time::Instant::now();
+
     unsafe {
         drawScreen.call();
     }
+
+    // Do the vsync ourselves, makes lag less bad
+    let remaining = 16u64.saturating_sub(before_draw.elapsed().as_millis() as u64);
+    std::thread::sleep(time::Duration::from_millis(remaining))
 }
 
 fn middle_of_drawing(param1: usize, param2: usize) {
