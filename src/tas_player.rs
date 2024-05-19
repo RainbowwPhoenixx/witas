@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::ops::Range;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Mutex;
 
@@ -295,6 +297,19 @@ impl TasPlayer {
         }
     }
 
+    pub fn add_puzzle_click(&mut self, cam_pos: Vec3, click_dir: Vec3) {
+        let current_tick = unsafe { MAIN_LOOP_COUNT.read() } - self.start_tick - 1;
+        self.trace
+            .add_puzzle_click(current_tick, cam_pos, click_dir)
+    }
+
+    pub fn send_puzzle_unlock(&self) {
+        let current_tick = unsafe { MAIN_LOOP_COUNT.read() } - self.start_tick;
+        self.send
+            .send(TasToControllerMessage::PuzzleUnlock(current_tick))
+            .unwrap();
+    }
+
     pub fn should_do_skipping(&self) -> bool {
         // Only skip after 60 frames, the "eyes opening" animation fucks things up
         self.state == PlaybackState::Playing
@@ -365,11 +380,13 @@ pub struct TraceTick {
 pub struct Playertrace {
     pub draw_option: TraceDrawOptions,
     ticks: Vec<TraceTick>,
+    puzzle_clicks: HashMap<u32, (Vec3, Vec3)>,
 }
 
 impl Playertrace {
     pub fn clear(&mut self) {
         self.ticks.clear();
+        self.puzzle_clicks.clear();
     }
 
     /// Add a point to the trace
@@ -377,22 +394,33 @@ impl Playertrace {
         self.ticks.push(TraceTick { pos, ang, interact })
     }
 
+    /// Add a puzzle click debug
+    pub fn add_puzzle_click(&mut self, tick: u32, cam_pos: Vec3, click_dir: Vec3) {
+        self.puzzle_clicks.insert(tick, (cam_pos, click_dir));
+    }
+
     /// Return the list of positions to display in-world
     pub fn get_pos_to_show(&self) -> &[TraceTick] {
-        let (start, end) = match self.draw_option.interval {
-            TraceInterval::First(from_start) => (0, from_start as usize),
-            TraceInterval::Last(from_end) => (
-                self.ticks.len().saturating_sub(from_end as usize),
-                self.ticks.len(),
-            ),
-            TraceInterval::Between(start, end) => (start as usize, end as usize),
-        };
+        let range = self.get_interval();
 
-        let end = end.min(self.ticks.len());
-        if (start..end).len() == 0 {
+        if range.len() == 0 {
             return &[];
         }
-        &self.ticks[start..end]
+        &self.ticks[range]
+    }
+
+    pub fn get_puzzle_clicks(&self) -> Vec<(Vec3, Vec3)> {
+        let range = self.get_interval();
+        self.puzzle_clicks
+            .iter()
+            .filter_map(|(&tick, &info)| {
+                if range.contains(&(tick as usize)) {
+                    Some(info)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     /// Teleport player to the given tick
@@ -405,5 +433,19 @@ impl Playertrace {
         };
 
         Some(())
+    }
+
+    pub fn get_interval(&self) -> Range<usize> {
+        let (start, end) = match self.draw_option.interval {
+            TraceInterval::First(from_start) => (0, from_start as usize),
+            TraceInterval::Last(from_end) => (
+                self.ticks.len().saturating_sub(from_end as usize),
+                self.ticks.len(),
+            ),
+            TraceInterval::Between(start, end) => (start as usize, end as usize),
+        };
+
+        let end = end.min(self.ticks.len());
+        start..end
     }
 }

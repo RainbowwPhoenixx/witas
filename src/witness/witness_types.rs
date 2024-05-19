@@ -12,6 +12,33 @@ pub struct Vec3 {
     pub z: f32,
 }
 
+impl std::ops::Add for Vec3 {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
+    }
+}
+
+impl Vec3 {
+    pub fn len(&self) -> f32 {
+        self.x * self.x + self.y * self.y + self.z * self.z
+    }
+
+    pub fn normalized(&self) -> Self {
+        let len = self.len();
+        Self {
+            x: self.x / len,
+            y: self.y / len,
+            z: self.z / len,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Vec2 {

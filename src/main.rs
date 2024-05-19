@@ -28,6 +28,7 @@ struct TasInterface {
     player_pos: (f32, f32, f32), // Replace with vec3
     player_ang: (f32, f32),      // Replace with vec2
     current_tick: u32,
+    latest_puzzle_unlock: u32,
     parse_errors: Vec<String>,
 
     // Trace
@@ -55,6 +56,7 @@ impl TasInterface {
             player_pos: (0., 0., 0.),
             player_ang: (0., 0.),
             current_tick: 0,
+            latest_puzzle_unlock: 0,
             parse_errors: vec![],
             trace_selected_tick: 0,
             trace_continuous_teleport: false,
@@ -93,6 +95,7 @@ impl TasInterface {
                     self.player_pos = pos;
                     self.player_ang = ang;
                 }
+                TasToControllerMessage::PuzzleUnlock(tick) => self.latest_puzzle_unlock = tick,
             }
         }
     }
@@ -156,6 +159,8 @@ impl TasInterface {
             self.player_ang.0, self.player_ang.1
         ));
         ui.label(format!("Current tick: {}", self.current_tick));
+
+        ui.label(format!("Latest puzzle unlock: {}", self.latest_puzzle_unlock));
 
         if !self.parse_errors.is_empty() {
             ui.heading("Parse errors");

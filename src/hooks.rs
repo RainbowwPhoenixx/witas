@@ -464,18 +464,38 @@ fn middle_of_drawing(param1: usize, param2: usize) {
     unsafe {
         if let Ok(player) = TAS_PLAYER.lock() {
             if let Some(player) = player.as_ref() {
+                // Draw positions
                 for tick_data in player.trace.get_pos_to_show() {
                     let color = match tick_data.interact {
                         crate::witness::witness_types::InteractionStatus::FocusMode => Color::RED,
-                        crate::witness::witness_types::InteractionStatus::SolvingPanel => Color::PINK,
+                        crate::witness::witness_types::InteractionStatus::SolvingPanel => {
+                            Color::PINK
+                        }
                         crate::witness::witness_types::InteractionStatus::Walking => Color::GREEN,
-                        crate::witness::witness_types::InteractionStatus::Cinematic => Color{ r: 0.5, g: 0.5, b: 0.5, a: 0.5 },
+                        crate::witness::witness_types::InteractionStatus::Cinematic => Color {
+                            r: 0.5,
+                            g: 0.5,
+                            b: 0.5,
+                            a: 0.5,
+                        },
                     };
 
                     let mut pos = tick_data.pos;
                     pos.z += player.trace.draw_option.z_offset;
 
-                    drawSphere.call(addr_of!(pos), player.trace.draw_option.sphere_radius, color, false);
+                    drawSphere.call(
+                        addr_of!(pos),
+                        player.trace.draw_option.sphere_radius,
+                        color,
+                        false,
+                    );
+                }
+
+                // Draw puzzls clicks
+                for (pos, dir) in player.trace.get_puzzle_clicks() {
+                    let color = Color::BLUE;
+                    let pos = pos + dir;
+                    drawSphere.call(addr_of!(pos), 0.005, color, false);
                 }
             }
         };
@@ -500,6 +520,66 @@ fn set_cursor_to_pos(idk: u64, x: u32, y: u32) {
     }
 
     unsafe { SetCursorToPos.call(idk, x, y) }
+}
+
+fn panel_click_check(
+    this: *const u32,
+    maybe_pos: *const Vec3,
+    maybe_direction: *const Vec3,
+    idk4: *const f32,
+    idk5: f32,
+    not_induced_by_click: bool,
+    idk7: u8,
+    idk8: u8,
+) -> usize {
+    static mut UNLOCKED_COUNT: u32 = 0;
+
+    let new_unlocked_panels_count = unsafe { *this };
+    let pos = unsafe { *maybe_pos };
+    let direction = unsafe { *maybe_direction };
+    let idk4_val = unsafe { *idk4 };
+
+    if unsafe { UNLOCKED_COUNT } < new_unlocked_panels_count {
+        unsafe { UNLOCKED_COUNT = new_unlocked_panels_count };
+        unsafe {
+            if let Ok(mut tas_player) = TAS_PLAYER.lock() {
+                if let Some(player) = tas_player.as_mut() {
+                    if player.get_playback_state() != PlaybackState::Stopped {
+                        player.send_puzzle_unlock();
+                    }
+                }
+            }
+        }
+    }
+
+    let ret = unsafe {
+        PanelClickCheck.call(
+            this,
+            maybe_pos,
+            maybe_direction,
+            idk4,
+            idk5,
+            not_induced_by_click,
+            idk7,
+            idk8,
+        )
+    };
+
+    if !not_induced_by_click {
+        unsafe {
+            if let Ok(mut tas_player) = TAS_PLAYER.lock() {
+                if let Some(player) = tas_player.as_mut() {
+                    if player.get_playback_state() != PlaybackState::Stopped {
+                        player.add_puzzle_click(pos, direction);
+                    }
+                }
+            }
+        }
+
+        info!("panel click attempt! idk1->0x0:{new_unlocked_panels_count} pos:{pos:?} dir:{direction:?} idk4:{idk4_val} idk5:{idk5}, idk7:{idk7}, idk8:{idk8} -> {ret}");
+    }
+
+    ret
 }
 
 // ------------------------------------------------------------------------------------
@@ -545,6 +625,7 @@ pub fn init_hooks() {
         MiddleOfDrawing        @ 0x140274b10 -> middle_of_drawing,
         WindowProcCallback     @ 0x14037aea0 -> window_proc_callback,
         SetCursorToPos         @ 0x140346580 -> set_cursor_to_pos,
+        PanelClickCheck        @ 0x140231550 -> panel_click_check,
     );
 
     // Patch frametime to make physics consistent
@@ -581,6 +662,7 @@ pub fn enable_hooks() {
         MiddleOfDrawing,
         WindowProcCallback,
         SetCursorToPos,
+        PanelClickCheck,
     );
 
     if !success {
@@ -604,6 +686,7 @@ pub fn disable_hooks() {
         MiddleOfDrawing,
         WindowProcCallback,
         SetCursorToPos,
+        PanelClickCheck,
     );
 
     if !success {
