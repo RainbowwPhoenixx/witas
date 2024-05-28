@@ -1,7 +1,7 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use eframe::{run_native, App};
-use egui::Ui;
+use egui::{Event, Ui};
 use witness_tas::communication::{client_thread, ControllerToTasMessage, TasToControllerMessage};
 use witness_tas::tas_player::{PlaybackState, TraceDrawOptions, TraceInterval};
 
@@ -13,6 +13,37 @@ enum TasInterfaceTab {
     About,
 }
 
+/// Create a DragValue with additionnal scroll interactions
+/// Press shift to midify 10x faster, and control for 100x. These stack.
+pub fn scrollable_dragvalue(value: &mut u32) -> impl egui::Widget + '_ {
+    move |ui: &mut egui::Ui| {
+        let mut dragvalue = ui
+            .add(egui::DragValue::new(value));
+
+        let events = dragvalue.ctx.input(|i| i.events.clone());
+
+        if dragvalue.hovered() {
+            for event in events {
+                if let Event::MouseWheel { unit: _, delta, modifiers } = event {
+                    let mut multiplier = 1;
+                    if modifiers.shift {
+                        multiplier *= 10;
+                    }
+                    if modifiers.ctrl {
+                        multiplier *= 100;
+                    }
+    
+                    *value = value.saturating_add_signed(multiplier * delta.y as i32);
+                    dragvalue.mark_changed();
+                }
+            }
+        }
+
+
+        dragvalue
+    }
+ }
+
 struct TasInterface {
     // Communication with the tas player
     to_server: Sender<ControllerToTasMessage>,
@@ -21,8 +52,10 @@ struct TasInterface {
     // Tas controls
     filename: String,
     playback_state: PlaybackState,
-    skipto: u32,
     looping: bool,
+    skipto: u32,
+    pauseat: u32,
+    always_pause_after_skip: bool,
 
     // Info
     player_pos: (f32, f32, f32), // Replace with vec3
@@ -51,8 +84,10 @@ impl TasInterface {
             from_server,
             filename: "example.wtas".to_string(),
             playback_state: PlaybackState::Stopped,
-            skipto: 0,
             looping: false,
+            skipto: 0,
+            pauseat: 0,
+            always_pause_after_skip: false,
             player_pos: (0., 0., 0.),
             player_ang: (0., 0.),
             current_tick: 0,
@@ -217,7 +252,7 @@ impl TasInterface {
         ui.horizontal(|ui| {
             let skip_label = ui.label("Skip to tick: ");
             let skipto = ui
-                .add(egui::DragValue::new(&mut self.skipto))
+                .add(scrollable_dragvalue(&mut self.skipto))
                 .labelled_by(skip_label.id);
 
             if skipto.changed() {
@@ -230,6 +265,29 @@ impl TasInterface {
                 }
             }
         });
+
+        ui.horizontal(|ui| {
+            let pauseat_label = ui.label("Pause at tick: ");
+            let pauseat = ui
+                .add_enabled(!self.always_pause_after_skip, scrollable_dragvalue(&mut self.pauseat))
+                .labelled_by(pauseat_label.id);
+
+            if self.always_pause_after_skip {
+                self.pauseat = self.skipto + 1;
+            }
+
+            if pauseat.changed() || self.always_pause_after_skip {
+                match self
+                    .to_server
+                    .send(ControllerToTasMessage::PauseAt(self.pauseat))
+                {
+                    Ok(_) => {}
+                    Err(err) => println!("{err}"),
+                }
+            }
+        });
+
+        ui.checkbox(&mut self.always_pause_after_skip, "Pause after skip");
 
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             ui.horizontal(|ui| {
@@ -256,7 +314,7 @@ impl TasInterface {
         ui.horizontal(|ui| {
             let label = ui.label("Selected tick: ");
             let dragvalue = ui
-                .add(egui::DragValue::new(&mut self.trace_selected_tick))
+                .add(scrollable_dragvalue(&mut self.trace_selected_tick))
                 .labelled_by(label.id);
 
             if ui
@@ -316,23 +374,23 @@ impl TasInterface {
             let mut trace_opt_changed = false;
             match self.trace_display_opts.interval {
                 TraceInterval::First(mut from_start) => {
-                    if ui.add(egui::DragValue::new(&mut from_start)).changed() {
+                    if ui.add(scrollable_dragvalue(&mut from_start)).changed() {
                         self.trace_display_opts.interval = TraceInterval::First(from_start);
                         trace_opt_changed = true;
                     }
                 }
                 TraceInterval::Last(mut from_end) => {
-                    if ui.add(egui::DragValue::new(&mut from_end)).changed() {
+                    if ui.add(scrollable_dragvalue(&mut from_end)).changed() {
                         self.trace_display_opts.interval = TraceInterval::Last(from_end);
                         trace_opt_changed = true;
                     }
                 }
                 TraceInterval::Between(mut start, mut end) => {
-                    if ui.add(egui::DragValue::new(&mut start)).changed() {
+                    if ui.add(scrollable_dragvalue(&mut start)).changed() {
                         self.trace_display_opts.interval = TraceInterval::Between(start, end);
                         trace_opt_changed = true;
                     }
-                    if ui.add(egui::DragValue::new(&mut end)).changed() || end < start {
+                    if ui.add(scrollable_dragvalue(&mut end)).changed() || end < start {
                         self.trace_display_opts.interval =
                             TraceInterval::Between(start, end.max(start));
                         trace_opt_changed = true;

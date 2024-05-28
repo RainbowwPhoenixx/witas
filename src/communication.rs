@@ -12,6 +12,7 @@ pub enum ControllerToTasMessage {
     PlayFile(String),
     Stop,
     SkipTo(u32),
+    PauseAt(u32),
     AdvanceFrame,
     TeleportToTick(u32),
     TraceOptions(TraceDrawOptions),
@@ -26,6 +27,8 @@ pub enum TasToControllerMessage {
         pos: (f32, f32, f32),
         ang: (f32, f32),
     },
+    /// Indicates that a puzzle unlocked on the given tick
+    PuzzleUnlock(u32)
 }
 
 /// Starts a server and listens for connections.

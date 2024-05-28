@@ -54,6 +54,7 @@ pub struct TasPlayer {
     start_tick: u32,
     current_tick: u32,
     skipto_tick: u32,
+    pauseat_tick: u32,
 
     next_line: usize,
     script_name: String,
@@ -88,6 +89,7 @@ impl TasPlayer {
             start_tick: 0,
             current_tick: 0,
             skipto_tick: 0,
+            pauseat_tick: 0,
             next_line: 0,
             script_name: "".to_string(),
             script: None,
@@ -144,7 +146,7 @@ impl TasPlayer {
             StartType::Now => {}
             StartType::NewGame => unsafe {
                 // These actions are lifted from the function in the witness
-                //  that handle the menu for new game
+                // that handle the menu for new game
                 NEW_GAME_FLAG.write(true);
                 DoRestart.call();
             },
@@ -158,7 +160,6 @@ impl TasPlayer {
         self.current_tick = 0;
         self.next_line = 0;
         self.state = PlaybackState::Playing;
-        // self.skipto_tick = script.skipto;
 
         self.trace.clear();
 
@@ -175,7 +176,7 @@ impl TasPlayer {
 
     /// Get the controller input and possibly advance state.
     pub fn get_controller(&mut self) -> Option<&ControllerState> {
-        self.update_from_server();
+        self.update_from_server(false);
 
         // Update the controller
         let pos = unsafe { PLAYER.read().position };
@@ -212,6 +213,16 @@ impl TasPlayer {
             self.send
                 .send(TasToControllerMessage::CurrentTick(current_tick))
                 .unwrap();
+
+            if current_tick == self.pauseat_tick {
+                self.state = PlaybackState::Paused;
+
+                self.send
+                    .send(TasToControllerMessage::PlaybackState(
+                        self.get_playback_state(),
+                    ))
+                    .unwrap();
+            }
 
             // Update the player pos history
             unsafe {
@@ -272,20 +283,35 @@ impl TasPlayer {
         Some(&self.controller)
     }
 
-    fn update_from_server(&mut self) {
+    fn update_from_server(&mut self, block: bool) {
         // We're using a loop and not try_iter here because the borrow checker
         // doesn't like it
         loop {
-            let Ok(msg) = self.recv.try_recv() else {
-                return;
+            let msg = if block && self.state == PlaybackState::Paused {
+                self.recv.recv().ok()
+            } else {
+                self.recv.try_recv().ok()
+            };
+
+            let msg = match msg {
+                Some(msg) => msg,
+                None => return,
             };
 
             match msg {
-                ControllerToTasMessage::PlayFile(filename) => self.start(Some(filename)),
+                ControllerToTasMessage::PlayFile(filename) => {
+                    if self.state == PlaybackState::Paused {
+                        self.state = PlaybackState::Playing;
+                    } else {
+                        self.start(Some(filename));
+                    }
+                }
                 ControllerToTasMessage::Stop => self.stop(),
                 ControllerToTasMessage::SkipTo(tick) => self.skipto_tick = tick,
+                ControllerToTasMessage::PauseAt(tick) => self.pauseat_tick = tick,
                 ControllerToTasMessage::AdvanceFrame => {
-                    error!("Frame by frame is not implemented yet")
+                    self.state = PlaybackState::Paused;
+                    return;
                 }
                 ControllerToTasMessage::TeleportToTick(tick) => {
                     if self.state == PlaybackState::Stopped {
@@ -295,6 +321,10 @@ impl TasPlayer {
                 ControllerToTasMessage::TraceOptions(opt) => self.trace.draw_option = opt,
             }
         }
+    }
+
+    pub fn block_until_next_frame(&mut self) {
+        self.update_from_server(true)
     }
 
     pub fn add_puzzle_click(&mut self, cam_pos: Vec3, click_dir: Vec3) {

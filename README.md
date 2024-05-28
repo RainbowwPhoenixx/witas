@@ -5,7 +5,7 @@
 - Playing a tas from a script input file
 - Extremely minor modding used to make the physics consistent (fixed at 60Hz)
 - A simple GUI to:
-    - Control TAS playback (Play, Stop, Fast-Forward)
+    - Control TAS playback (Play, Stop, Fast-Forward, Frame by frame)
     - Some information like current playback tick and player pos/angles
     - Various other configuration/tools
 
@@ -40,7 +40,6 @@ The injected library produces a log file called witness_tas.log to help troubles
 
 
 ## Planned features
-- Frame by frame
 - Savestates
 - In my wildest dreams, we would also leverage pathfinding and automatic puzzle solving
 - Puzzle solving hud for snipes, to help you see what you're doing
@@ -66,6 +65,7 @@ The injected library produces a log file called witness_tas.log to help troubles
     - WorldToScreen function?
     - drawing debug stuff
     - HOW CLICK PUZZLES WHILE MOVING
+- fix needing to move before starting the first TAS
 
 # Contributing
 The project is open to contributions. Here's a brief rundown of how it works.

@@ -460,6 +460,15 @@ fn draw_override() {
         drawScreen.call();
     }
 
+    // Do the frame by frame
+    if let Ok(mut player) = unsafe { TAS_PLAYER.lock() } {
+        if let Some(player) = player.as_mut() {
+            if player.get_playback_state() == PlaybackState::Paused {
+                player.block_until_next_frame();
+            }
+        }
+    };
+
     // Do the vsync ourselves, makes lag less bad
     let remaining = 16u64.saturating_sub(before_draw.elapsed().as_millis() as u64);
     std::thread::sleep(time::Duration::from_millis(remaining))
