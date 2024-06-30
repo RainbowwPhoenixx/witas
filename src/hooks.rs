@@ -24,7 +24,7 @@ use crate::witness::witness_types::{Color, Entity, Vec2, Vec3};
 /// );
 /// ```
 macro_rules! init_hook {
-    ( $( $hook: ident @ $target_addr: literal -> $detour: ident ),* $(,)? ) => {
+    ( $( $hook: ident @ $target_addr: literal -> $detour: expr ),* $(,)? ) => {
         {
             let mut succeed = true;
             $(
@@ -144,6 +144,8 @@ static_detour! {
     static SetCursorToPos: unsafe extern "win64" fn(u64, u32, u32);
 
     static PanelClickCheck: unsafe extern "win64" fn(*const u32, *const Vec3, *const Vec3, *const f32, f32, bool, u8, u8) -> usize;
+
+    pub static CopyString: unsafe extern "win64" fn(*const i8) -> *mut i8;
 }
 
 static PTR_INPUT_STH1: PointerChain<usize> = PointerChain::new(&[0x14469a060, 0x0]);
@@ -166,6 +168,11 @@ static mut SAVED_CAM_ANG: Option<Vec2> = None;
 
 // Holds the real tabbed out value, since we make the game forget
 static mut TABBED_OUT: bool = false;
+
+// Variables for save loading
+pub static mut SAVE_PATH: PointerChain<*mut i8> = PointerChain::new(&[0x14062d790]);
+pub static mut LOAD_SAVE_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d789]);
+pub static mut APPDATA_PATH: PointerChain<*mut i8> = PointerChain::new(&[0x14062d778]);
 
 // ------------------------------------------------------------------------------------
 //                                 OUR OVERRIDES
@@ -619,13 +626,12 @@ pub fn init_hooks() {
     debug!("Done. Starting to initialise hooks.");
 
     // Placeholder function for functions we want to call without hooking
-    fn placeholder() {
+    fn placeholder_func() {
         error!("This function is not supposed to be hooked.");
         unreachable!()
     }
 
-    let placeholder_0arg = placeholder;
-    let placeholder_4arg = |_, _, _, _| placeholder();
+    let placeholder = placeholder_func as *const ();
 
     // Init the hooks
     let success = init_hook!(
@@ -638,13 +644,14 @@ pub fn init_hooks() {
         HandleKeyboardInput    @ 0x140344a60 -> handle_keyboard_input,
         IsKeyPressed           @ 0x1403448e0 -> is_key_pressed,
         GetMouseDeltaPos       @ 0x1403448f0 -> get_mouse_delta_pos,
-        DoRestart              @ 0x1401f9e60 -> placeholder_0arg,
         drawScreen             @ 0x1401c8970 -> draw_override,
-        drawSphere             @ 0x1400761d0 -> placeholder_4arg,
         MiddleOfDrawing        @ 0x140274b10 -> middle_of_drawing,
         WindowProcCallback     @ 0x14037aea0 -> window_proc_callback,
         SetCursorToPos         @ 0x140346580 -> set_cursor_to_pos,
         PanelClickCheck        @ 0x140231550 -> panel_click_check,
+        DoRestart              @ 0x1401f9e60 -> std::mem::transmute::<_, fn()>(placeholder),
+        drawSphere             @ 0x1400761d0 -> std::mem::transmute::<_, fn(_,_,_,_)>(placeholder),
+        CopyString             @ 0x1402e9490 -> std::mem::transmute::<_, fn(_) -> _>(placeholder),
     );
 
     // Patch frametime to make physics consistent

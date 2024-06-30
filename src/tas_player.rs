@@ -1,13 +1,16 @@
 use std::collections::HashMap;
+use std::ffi::CStr;
 use std::ops::Range;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Mutex;
 
 use crate::communication::{server_thread, ControllerToTasMessage, TasToControllerMessage};
-use crate::hooks::{INTERACTION_STATUS, PLAYER_ANG, PLAYER_POS};
+use crate::hooks::{
+    CopyString, APPDATA_PATH, INTERACTION_STATUS, PLAYER_ANG, PLAYER_POS, SAVE_PATH,
+};
 use crate::witness::witness_types::{InteractionStatus, Vec2};
 use crate::{
-    hooks::{DoRestart, MAIN_LOOP_COUNT, NEW_GAME_FLAG, PLAYER},
+    hooks::{DoRestart, LOAD_SAVE_FLAG, MAIN_LOOP_COUNT, NEW_GAME_FLAG, PLAYER},
     script::{self, Script, StartType},
     witness::witness_types::Vec3,
 };
@@ -142,7 +145,7 @@ impl TasPlayer {
 
         let Some(script) = &self.script else { return };
 
-        match script.start {
+        match &script.start {
             StartType::Now => {}
             StartType::NewGame => unsafe {
                 // These actions are lifted from the function in the witness
@@ -150,9 +153,31 @@ impl TasPlayer {
                 NEW_GAME_FLAG.write(true);
                 DoRestart.call();
             },
-            StartType::Save(_) => {
-                error!("Starting from a save is not implemented yet. Starting now instead.")
-            }
+            StartType::Save(path) => unsafe {
+                let str_ptr = APPDATA_PATH.read();
+
+                if str_ptr == std::ptr::null_mut() {
+                    error!("Unable to find save folder, nullptr");
+                    return;
+                }
+
+                let appdata_location = CStr::from_ptr(str_ptr).to_string_lossy().to_string();
+                let full_path = format!("{}\\{}", appdata_location, path);
+
+                info!("Loading save {full_path}");
+
+                let Ok(c_str) = std::ffi::CString::new(full_path.as_bytes()) else {
+                    error!("Invalid filename: {full_path}");
+                    return;
+                };
+
+                // We use the game's copy string so that the game allocates
+                // the string for us, and does not try to free memory allocated
+                // by us (explicitely discouraged by into_raw's documentation)
+                SAVE_PATH.write(CopyString.call(c_str.into_raw()));
+                LOAD_SAVE_FLAG.write(true);
+                DoRestart.call();
+            },
         }
 
         self.controller = Default::default();

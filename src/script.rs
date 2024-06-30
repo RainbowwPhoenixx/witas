@@ -39,13 +39,14 @@ impl Script {
             .ignore_then(text::int(10).map(|s: String| s.parse().unwrap()))
             .padded();
 
-        let path = filter(|c: &char| c.is_ascii()).repeated();
+        let path = filter(|c: &char| !c.is_ascii_control()).repeated();
 
         let start = text::keyword("start").padded().ignore_then(
             text::keyword("newgame")
                 .to(StartType::NewGame)
                 .or(text::keyword("now").to(StartType::Now))
                 .or(text::keyword("save")
+                    .padded()
                     .then(path)
                     .map(|(_, str)| StartType::Save(String::from_iter(str)))),
         );
