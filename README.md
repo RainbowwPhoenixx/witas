@@ -49,7 +49,6 @@ The injected library produces a log file called witness_tas.log to help troubles
     - Config stuff:
         - TAS folder (currently forced to "game dir/tas")
         - number of decimals in the pos/ang display
-    - "About" tab with version, etc
 - Freecam, to watch the TAS from any world point (useful to watch a panel while tasing a snipe)
 
 ## Todo

@@ -14,7 +14,6 @@ use crate::{
     script::{self, Script, StartType},
     witness::witness_types::Vec3,
 };
-use chumsky::Parser as _;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
@@ -118,28 +117,17 @@ impl TasPlayer {
                     .unwrap();
                 None
             }
-            Ok(src) => match Script::get_parser().parse(src) {
+            Ok(src) => match Script::try_from(src) {
                 Err(parse_errs) => {
                     for err in &parse_errs {
                         error!("Parse error: {err}");
                     }
                     self.send
-                        .send(TasToControllerMessage::ParseErrors(
-                            parse_errs.iter().map(|e| format!("{e}")).collect(),
-                        ))
+                        .send(TasToControllerMessage::ParseErrors(parse_errs))
                         .unwrap();
                     None
                 }
-                Ok(mut script) => match script.pre_process() {
-                    Ok(_) => Some(script),
-                    Err(err) => {
-                        error!("Parse error: {err}");
-                        self.send
-                            .send(TasToControllerMessage::ParseErrors(vec![err]))
-                            .unwrap();
-                        None
-                    }
-                },
+                Ok(script) => Some(script),
             },
         };
 

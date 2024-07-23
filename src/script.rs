@@ -27,7 +27,7 @@ pub struct Script {
 }
 
 impl Script {
-    pub fn get_parser() -> impl Parser<char, Script, Error = Simple<char>> {
+    fn get_parser() -> impl Parser<char, Self, Error = Simple<char>> {
         let padding_no_newline = filter(|c: &char| c.is_inline_whitespace()).repeated();
 
         let comment = just("//")
@@ -65,17 +65,21 @@ impl Script {
                 None => num.parse::<i32>().unwrap(),
             });
 
+        let coords = signed_int
+            .then_ignore(padding_no_newline)
+            .then(signed_int)
+            .padded_by(padding_no_newline);
+
+        let mouse_move_part = just('|')
+            .ignore_then(coords.or_not())
+            .or_not()
+            .map(|c| c.flatten());
+
         let line = tick
             .then_ignore(just('>'))
             .then(key.repeated())
-            .then(
-                just('|')
-                    .ignore_then(signed_int)
-                    .then_ignore(padding_no_newline)
-                    .then(signed_int)
-                    .or_not(),
-            )
-            .then_ignore(text::newline())
+            .then(mouse_move_part)
+            .then_ignore(comment.or_not())
             .map(|(((is_relative, tick), keys), mouse)| ScriptLine {
                 relative: is_relative.is_some(),
                 tick,
@@ -102,7 +106,7 @@ impl Script {
     }
 
     /// Performs additionnal checks on the script.
-    pub fn pre_process(&mut self) -> Result<(), String> {
+    fn pre_process(&mut self) -> Result<(), String> {
         // Check version
         if self.version != 0 {
             return Err(format!("Invalid version {}", self.version));
@@ -125,5 +129,41 @@ impl Script {
         }
 
         Ok(())
+    }
+
+    pub fn try_from(src: String) -> Result<Self, Vec<String>> {
+        match Self::get_parser().parse(src.clone()) {
+            Err(parse_errs) => Err(parse_errs.iter().map(|e| {
+                let line = src[..e.span().end].match_indices("\n").count()+1;
+                format!("line {line}: {e}")
+            }).collect()),
+            Ok(mut script) => match script.pre_process() {
+                Ok(_) => Ok(script),
+                Err(err) => Err(vec![err]),
+            },
+        }
+    }
+}
+
+mod tests {
+    use crate::script::Script;
+    use chumsky::Parser;
+
+    #[test]
+    fn test_parser() {
+        let script = "
+        version 0
+        start now
+        
+        1>|0 0
+        2>|
+        3>|0 0 
+        4>|0 0 // test
+        5>|0 0//test
+        ";
+
+        let res = Script::get_parser().parse(script);
+        // println!("{:?}", res);
+        assert!(res.is_ok())
     }
 }
