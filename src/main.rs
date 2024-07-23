@@ -151,9 +151,14 @@ impl App for TasInterface {
                 .send(ControllerToTasMessage::SkipTo(self.skipto))
                 .is_err()
             {
+                ui.label(
+                    "Failed to connect to The Witness! Open the game and press the button below.",
+                );
                 if ui.button("Connect").clicked() {
                     self.connect();
                 }
+                ui.separator();
+                self.about_tab(ui);
                 return;
             }
 
@@ -475,8 +480,23 @@ impl TasInterface {
     fn config_tab(&mut self, ui: &mut Ui) {
         ui.label("Under Construction");
     }
+
+    /// Draw the about TAB
     fn about_tab(&mut self, ui: &mut Ui) {
-        ui.label("Under Construction");
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+            ui.label("This TAS tool for The Witness was made by RainbowwPhoenixx");
+            ui.hyperlink_to(
+                "Source code on github",
+                "https://github.com/RainbowwPhoenixx/witas",
+            );
+
+            ui.label(format!(
+                "version: v{}\ncommit: {}",
+                env!("CARGO_PKG_VERSION"),
+                env!("GIT_HASH")
+            ));
+            ui.centered_and_justified(|ui| {});
+        });
     }
 }
 
