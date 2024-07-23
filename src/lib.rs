@@ -44,7 +44,11 @@ fn setup() {
 
     std::panic::update_hook(move |prev, info| {
         if let Some(location) = info.location() {
-            error!("TAS tool panicked in file {} at line {}: {info}", location.file(), location.line());
+            error!(
+                "TAS tool panicked in file {} at line {}: {info}",
+                location.file(),
+                location.line()
+            );
         } else {
             error!("TAS tool panicked: {info}")
         }

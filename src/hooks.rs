@@ -143,7 +143,7 @@ static_detour! {
 
     static SetCursorToPos: unsafe extern "win64" fn(u64, u32, u32);
 
-    static PanelClickCheck: unsafe extern "win64" fn(*const u32, *const Vec3, *const Vec3, *const f32, f32, bool, u8, u8) -> usize;
+    static PanelClickCheck: unsafe extern "win64" fn(*const u32, *const Vec3, *const Vec3, *const f32, f32, bool, u8, u8) -> *const Entity;
 
     pub static CopyString: unsafe extern "win64" fn(*const i8) -> *mut i8;
 }
@@ -518,10 +518,20 @@ fn middle_of_drawing(param1: usize, param2: usize) {
                 }
 
                 // Draw puzzls clicks
+                let color = Color::BLUE;
                 for (pos, dir) in player.trace.get_puzzle_clicks() {
-                    let color = Color::BLUE;
-                    let pos = pos + dir;
-                    drawSphere.call(addr_of!(pos), 0.005, color, false);
+                    let pos = pos
+                        + dir
+                            * player
+                                .trace
+                                .draw_option
+                                .puzzle_click_indicator_distance_multiplier;
+                    drawSphere.call(
+                        addr_of!(pos),
+                        player.trace.draw_option.puzzle_click_indicator_radius,
+                        color,
+                        false,
+                    );
                 }
             }
         };
@@ -550,20 +560,17 @@ fn set_cursor_to_pos(idk: u64, x: u32, y: u32) {
 
 fn panel_click_check(
     this: *const u32,
-    maybe_pos: *const Vec3,
-    maybe_direction: *const Vec3,
+    position: *const Vec3,
+    direction: *const Vec3,
     idk4: *const f32,
     idk5: f32,
     not_induced_by_click: bool,
     idk7: u8,
     idk8: u8,
-) -> usize {
+) -> *const Entity {
     static mut UNLOCKED_COUNT: u32 = 0;
 
     let new_unlocked_panels_count = unsafe { *this };
-    let pos = unsafe { *maybe_pos };
-    let direction = unsafe { *maybe_direction };
-    let idk4_val = unsafe { *idk4 };
 
     if unsafe { UNLOCKED_COUNT } < new_unlocked_panels_count {
         unsafe { UNLOCKED_COUNT = new_unlocked_panels_count };
@@ -581,8 +588,8 @@ fn panel_click_check(
     let ret = unsafe {
         PanelClickCheck.call(
             this,
-            maybe_pos,
-            maybe_direction,
+            position,
+            direction,
             idk4,
             idk5,
             not_induced_by_click,
@@ -596,13 +603,11 @@ fn panel_click_check(
             if let Ok(mut tas_player) = TAS_PLAYER.lock() {
                 if let Some(player) = tas_player.as_mut() {
                     if player.get_playback_state() != PlaybackState::Stopped {
-                        player.add_puzzle_click(pos, direction);
+                        player.add_puzzle_click(*position, *direction);
                     }
                 }
             }
         }
-
-        info!("panel click attempt! idk1->0x0:{new_unlocked_panels_count} pos:{pos:?} dir:{direction:?} idk4:{idk4_val} idk5:{idk5}, idk7:{idk7}, idk8:{idk8} -> {ret}");
     }
 
     ret

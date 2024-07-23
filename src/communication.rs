@@ -28,7 +28,7 @@ pub enum TasToControllerMessage {
         ang: (f32, f32),
     },
     /// Indicates that a puzzle unlocked on the given tick
-    PuzzleUnlock(u32)
+    PuzzleUnlock(u32),
 }
 
 /// Starts a server and listens for connections.

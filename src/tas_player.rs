@@ -412,6 +412,8 @@ impl Default for TraceInterval {
 pub struct TraceDrawOptions {
     pub sphere_radius: f32,
     pub z_offset: f32,
+    pub puzzle_click_indicator_distance_multiplier: f32,
+    pub puzzle_click_indicator_radius: f32,
     pub interval: TraceInterval,
 }
 
@@ -420,6 +422,8 @@ impl Default for TraceDrawOptions {
         Self {
             sphere_radius: 0.05,
             z_offset: Default::default(),
+            puzzle_click_indicator_distance_multiplier: Default::default(),
+            puzzle_click_indicator_radius: 0.01,
             interval: Default::default(),
         }
     }

@@ -24,6 +24,18 @@ impl std::ops::Add for Vec3 {
     }
 }
 
+impl std::ops::Mul<f32> for Vec3 {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+        }
+    }
+}
+
 impl Vec3 {
     pub fn len(&self) -> f32 {
         self.x * self.x + self.y * self.y + self.z * self.z
@@ -56,15 +68,46 @@ pub struct Color<T> {
 }
 
 impl Color<f32> {
-    pub const RED: Color<f32> = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
-    pub const GREEN: Color<f32> = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
-    pub const BLUE: Color<f32> = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
-    pub const WHITE: Color<f32> = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
-    pub const BLACK: Color<f32> = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
+    pub const RED: Color<f32> = Color {
+        r: 1.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    pub const GREEN: Color<f32> = Color {
+        r: 0.0,
+        g: 1.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    pub const BLUE: Color<f32> = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    pub const WHITE: Color<f32> = Color {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    pub const BLACK: Color<f32> = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
 
-    pub const PINK: Color<f32> = Color { r: 1.0, g: 0.4, b: 0.4, a: 1.0 };
-} 
+    pub const PINK: Color<f32> = Color {
+        r: 1.0,
+        g: 0.4,
+        b: 0.4,
+        a: 1.0,
+    };
+}
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Entity {
     unk1: [u8; 0x8],
@@ -73,7 +116,7 @@ pub struct Entity {
     pub position: Vec3,
 }
 
-back_to_enum!{
+back_to_enum! {
     #[repr(C)]
     pub enum InteractionStatus {
         FocusMode = 0x0,

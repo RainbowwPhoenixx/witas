@@ -17,14 +17,18 @@ enum TasInterfaceTab {
 /// Press shift to midify 10x faster, and control for 100x. These stack.
 pub fn scrollable_dragvalue(value: &mut u32) -> impl egui::Widget + '_ {
     move |ui: &mut egui::Ui| {
-        let mut dragvalue = ui
-            .add(egui::DragValue::new(value));
+        let mut dragvalue = ui.add(egui::DragValue::new(value));
 
         let events = dragvalue.ctx.input(|i| i.events.clone());
 
         if dragvalue.hovered() {
             for event in events {
-                if let Event::MouseWheel { unit: _, delta, modifiers } = event {
+                if let Event::MouseWheel {
+                    unit: _,
+                    delta,
+                    modifiers,
+                } = event
+                {
                     let mut multiplier = 1;
                     if modifiers.shift {
                         multiplier *= 10;
@@ -38,7 +42,6 @@ pub fn scrollable_dragvalue(value: &mut u32) -> impl egui::Widget + '_ {
                 }
             }
         }
-
 
         dragvalue
     }
@@ -195,7 +198,10 @@ impl TasInterface {
         ));
         ui.label(format!("Current tick: {}", self.current_tick));
 
-        ui.label(format!("Latest puzzle unlock: {}", self.latest_puzzle_unlock));
+        ui.label(format!(
+            "Latest puzzle unlock: {}",
+            self.latest_puzzle_unlock
+        ));
 
         if !self.parse_errors.is_empty() {
             ui.heading("Parse errors");
@@ -269,7 +275,10 @@ impl TasInterface {
         ui.horizontal(|ui| {
             let pauseat_label = ui.label("Pause at tick: ");
             let pauseat = ui
-                .add_enabled(!self.always_pause_after_skip, scrollable_dragvalue(&mut self.pauseat))
+                .add_enabled(
+                    !self.always_pause_after_skip,
+                    scrollable_dragvalue(&mut self.pauseat),
+                )
                 .labelled_by(pauseat_label.id);
 
             if self.always_pause_after_skip {
@@ -408,20 +417,54 @@ impl TasInterface {
             }
         });
 
-        let radius = ui.add(
-            egui::Slider::new(&mut self.trace_display_opts.sphere_radius, 0.005..=0.08)
-                .text("radius"),
-        );
-        let z_off = ui.add(
-            egui::Slider::new(&mut self.trace_display_opts.z_offset, -1.0..=1.0).text("z offset"),
-        );
+        let radius = ui.horizontal(|ui| {
+            ui.label("Trace sphere radius:");
+            ui.add(
+                egui::DragValue::new(&mut self.trace_display_opts.sphere_radius)
+                    .clamp_range(0.005..=0.08)
+                    .speed(0.01),
+            )
+        });
+        let z_off = ui.horizontal(|ui| {
+            ui.label("Trace vertical offset:");
+            ui.add(
+                egui::DragValue::new(&mut self.trace_display_opts.z_offset)
+                    .clamp_range(-1.0..=1.0)
+                    .speed(0.1),
+            )
+        });
+        let puzzle_click_dist = ui.horizontal(|ui| {
+            ui.label("Click indicator distance:");
+            ui.add(
+                egui::DragValue::new(
+                    &mut self
+                        .trace_display_opts
+                        .puzzle_click_indicator_distance_multiplier,
+                )
+                .clamp_range(1.0..=1000.0)
+                .speed(0.1),
+            )
+        });
+        let puzzle_click_radius = ui.horizontal(|ui| {
+            ui.label("Click indicator radius:");
+            ui.add(
+                egui::DragValue::new(&mut self.trace_display_opts.puzzle_click_indicator_radius)
+                    .clamp_range(0.005..=0.08)
+                    .speed(0.01),
+            )
+        });
 
         let reset_defaults = ui.button("Reset defaults").clicked();
         if reset_defaults {
             self.trace_display_opts = Default::default();
         }
 
-        if radius.changed() || z_off.changed() || reset_defaults {
+        if radius.inner.changed()
+            || z_off.inner.changed()
+            || puzzle_click_dist.inner.changed()
+            || puzzle_click_radius.inner.changed()
+            || reset_defaults
+        {
             self.to_server
                 .send(ControllerToTasMessage::TraceOptions(
                     self.trace_display_opts,
@@ -439,7 +482,7 @@ impl TasInterface {
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 300.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 340.0]),
         ..Default::default()
     };
 
