@@ -62,7 +62,6 @@ The injected library produces a log file called witness_tas.log to help troubles
     - WorldToScreen function?
     - drawing debug stuff
     - HOW CLICK PUZZLES WHILE MOVING
-- fix needing to move before starting the first TAS
 
 # Contributing
 The project is open to contributions. Here's a brief rundown of how it works.

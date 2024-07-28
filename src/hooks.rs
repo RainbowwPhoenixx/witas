@@ -308,6 +308,7 @@ fn get_input(this: usize, hrawinput: *const RAWINPUT) -> u64 {
 }
 
 fn handle_all_messages(this: usize, idk: u64) {
+    unsafe { HANDLE_MSG_PARAM1 = Some(this) };
     unsafe { HandleAllMessages.call(this, idk) }
 
     // Using a mix of keyboard inputs and messages isn't very good here, TODO: make it use the same mechanism
@@ -315,8 +316,6 @@ fn handle_all_messages(this: usize, idk: u64) {
 }
 
 fn handle_message(this: usize, message: *const MSG) -> u64 {
-    unsafe { HANDLE_MSG_PARAM1 = Some(this) };
-
     // During tas playback, ignore all user messages
     if let Ok(player) = unsafe { TAS_PLAYER.lock() } {
         if let Some(player) = player.as_ref() {
