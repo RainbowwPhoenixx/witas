@@ -296,6 +296,16 @@ impl TasPlayer {
                 if let Some(mouse) = next_line.mouse {
                     self.controller.current.mouse_pos = mouse;
                 }
+
+                // Execute the tools
+                for tool in &next_line.tools {
+                    match tool {
+                        script::Tool::SetPos { pos, ang } => unsafe {
+                            PLAYER_POS.write(*pos);
+                            PLAYER_ANG.write(*ang);
+                        },
+                    }
+                }
             }
         }
 

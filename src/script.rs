@@ -1,5 +1,7 @@
 use chumsky::{prelude::*, text::Character};
 
+use crate::witness::witness_types::{Vec2, Vec3};
+
 /// Defines how the TAS should start.
 #[derive(Debug, Clone)]
 pub enum StartType {
@@ -12,11 +14,18 @@ pub enum StartType {
 }
 
 #[derive(Debug, Clone)]
+pub enum Tool {
+    /// Set the position of the player
+    SetPos { pos: Vec3, ang: Vec2 },
+}
+
+#[derive(Debug, Clone)]
 pub struct ScriptLine {
     pub relative: bool,
     pub tick: u32,
     pub keys: Vec<char>,
     pub mouse: Option<(i32, i32)>,
+    pub tools: Option<Tool>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,19 +68,52 @@ impl Script {
 
         let signed_int = just('-')
             .or_not()
-            .then(text::int(10))
-            .map(|(sign, num)| match sign {
-                Some(_) => -num.parse::<i32>().unwrap(),
-                None => num.parse::<i32>().unwrap(),
-            });
+            .chain::<char, _, _>(text::int(10))
+            .collect::<String>()
+            .map(|num| num.parse::<i32>().unwrap());
 
-        let coords = signed_int
-            .then_ignore(padding_no_newline)
-            .then(signed_int)
-            .padded_by(padding_no_newline);
+        let float = just('-')
+            .or_not()
+            .chain::<char, _, _>(text::int(10))
+            .chain::<char, _, _>(just('.'))
+            .chain::<char, _, _>(text::digits(10).or_not())
+            .collect::<String>()
+            .map(|num| num.parse::<f32>().unwrap());
+
+        let coords = signed_int.then_ignore(padding_no_newline).then(signed_int);
 
         let mouse_move_part = just('|')
+            .ignore_then(padding_no_newline)
             .ignore_then(coords.or_not())
+            .or_not()
+            .map(|c| c.flatten());
+
+        let setpos_tool = just("setpos")
+            .ignore_then(padding_no_newline)
+            .ignore_then(float)
+            .then_ignore(padding_no_newline)
+            .chain(float)
+            .then_ignore(padding_no_newline)
+            .chain(float)
+            .then_ignore(padding_no_newline)
+            .chain(float)
+            .then_ignore(padding_no_newline)
+            .chain(float)
+            .map(|numbers| Tool::SetPos {
+                pos: Vec3 {
+                    x: numbers[0],
+                    y: numbers[1],
+                    z: numbers[2],
+                },
+                ang: Vec2 {
+                    x: numbers[3],
+                    y: numbers[4],
+                },
+            });
+
+        let tools_part = just('|')
+            .ignore_then(padding_no_newline)
+            .ignore_then(setpos_tool.or_not())
             .or_not()
             .map(|c| c.flatten());
 
@@ -79,12 +121,14 @@ impl Script {
             .then_ignore(just('>'))
             .then(key.repeated())
             .then(mouse_move_part)
+            .then(tools_part)
             .then_ignore(comment.or_not())
-            .map(|(((is_relative, tick), keys), mouse)| ScriptLine {
+            .map(|((((is_relative, tick), keys), mouse), tools)| ScriptLine {
                 relative: is_relative.is_some(),
                 tick,
                 keys,
                 mouse,
+                tools,
             });
 
         let lines = line
@@ -133,10 +177,13 @@ impl Script {
 
     pub fn try_from(src: String) -> Result<Self, Vec<String>> {
         match Self::get_parser().parse(src.clone()) {
-            Err(parse_errs) => Err(parse_errs.iter().map(|e| {
-                let line = src[..e.span().end].match_indices("\n").count()+1;
-                format!("line {line}: {e}")
-            }).collect()),
+            Err(parse_errs) => Err(parse_errs
+                .iter()
+                .map(|e| {
+                    let line = src[..e.span().end].match_indices("\n").count() + 1;
+                    format!("line {line}: {e}")
+                })
+                .collect()),
             Ok(mut script) => match script.pre_process() {
                 Ok(_) => Ok(script),
                 Err(err) => Err(vec![err]),
@@ -145,6 +192,7 @@ impl Script {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::script::Script;
     use chumsky::Parser;
@@ -163,7 +211,6 @@ mod tests {
         ";
 
         let res = Script::get_parser().parse(script);
-        // println!("{:?}", res);
         assert!(res.is_ok())
     }
 }
