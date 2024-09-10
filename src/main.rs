@@ -160,14 +160,18 @@ impl TasInterface {
     /// Draw the info section
     fn info(&mut self, ui: &mut Ui) {
         ui.heading("Info");
-        ui.label(format!(
-            "pos: {:4.3} {:4.3} {:4.3}",
-            self.player_pos.0, self.player_pos.1, self.player_pos.2
-        ));
-        ui.label(format!(
-            "ang: {:1.3} {:1.3}",
-            self.player_ang.0, self.player_ang.1
-        ));
+        let pos = ui
+            .label(format!(
+                "pos: {:4.3} {:4.3} {:4.3}",
+                self.player_pos.0, self.player_pos.1, self.player_pos.2
+            ))
+            .on_hover_text("Click to put exact position into clipboard");
+        let ang = ui
+            .label(format!(
+                "ang: {:1.3} {:1.3}",
+                self.player_ang.0, self.player_ang.1
+            ))
+            .on_hover_text("Click to put exact angles into clipboard");
         ui.label(format!("Current tick: {}", self.current_tick));
 
         ui.label(format!(
@@ -180,6 +184,21 @@ impl TasInterface {
             for error in &self.parse_errors {
                 ui.label(error);
             }
+        }
+
+        // Paste exact pos/ang into clipboard on click
+        if pos.clicked() {
+            ui.output_mut(|o| {
+                o.copied_text = format!(
+                    "{:10.15} {:10.15} {:10.15}",
+                    self.player_pos.0, self.player_pos.1, self.player_pos.2
+                )
+            })
+        }
+        if ang.clicked() {
+            ui.output_mut(|o| {
+                o.copied_text = format!("{:1.15} {:1.15}", self.player_ang.0, self.player_ang.1)
+            })
         }
     }
 
