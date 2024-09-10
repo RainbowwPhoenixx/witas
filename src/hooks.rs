@@ -404,6 +404,10 @@ fn handle_keyboard_input(
         };
     }
 
+    if virtual_keycode == VirtualKeyCode::E as u32 && press_down == 1 {
+        unsafe { DEBUG_SHOW_EPS.write(!DEBUG_SHOW_EPS.read()) }
+    }
+
     unsafe {
         HandleKeyboardInput.call(
             this,

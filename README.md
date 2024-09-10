@@ -16,6 +16,7 @@
     - P: quick tas replay
     - N: noclip toggle
     - J/K: position saving/restoring (very useful while TASing snipes)
+    - E: puzzle debug toggle
 
 ## Setting it up, usage and debugging
 ### Linux
