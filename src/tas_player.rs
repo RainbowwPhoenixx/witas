@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use crate::communication::{server_thread, ControllerToTasMessage, TasToControllerMessage};
 use crate::hooks::{
-    CopyString, APPDATA_PATH, INTERACTION_STATUS, PLAYER_ANG, PLAYER_POS, SAVE_PATH,
+    CopyString, APPDATA_PATH, INTERACTION_STATUS, PLAYER_ANG, PLAYER_POS, RNG_SEED, SAVE_PATH,
 };
 use crate::witness::witness_types::{InteractionStatus, Vec2};
 use crate::{
@@ -222,6 +222,13 @@ impl TasPlayer {
         // Update controller
         // Get pressed keys
         let current_tick = unsafe { MAIN_LOOP_COUNT.read() } - self.start_tick;
+        if current_tick == 0 {
+            // Reset RNG
+            unsafe {
+                let rng_ptr = RNG_SEED.read();
+                *rng_ptr = 0xbeefface;
+            }
+        }
         if self.current_tick != current_tick {
             self.send
                 .send(TasToControllerMessage::CurrentTick(current_tick))

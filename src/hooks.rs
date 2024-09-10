@@ -1,3 +1,4 @@
+use rand::Rng;
 use retour::static_detour;
 use std::ptr::addr_of;
 use std::time;
@@ -146,6 +147,9 @@ static_detour! {
     static PanelClickCheck: unsafe extern "win64" fn(*const u32, *const Vec3, *const Vec3, *const f32, f32, bool, u8, u8) -> *const Entity;
 
     pub static CopyString: unsafe extern "win64" fn(*const i8) -> *mut i8;
+
+    // rng stuff
+    static GetRandomFloatInRange: unsafe extern "win64" fn(*mut u32, f32, f32) -> f32;
 }
 
 static PTR_INPUT_STH1: PointerChain<usize> = PointerChain::new(&[0x14469a060, 0x0]);
@@ -173,6 +177,8 @@ static mut TABBED_OUT: bool = false;
 pub static mut SAVE_PATH: PointerChain<*mut i8> = PointerChain::new(&[0x14062d790]);
 pub static mut LOAD_SAVE_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d789]);
 pub static mut APPDATA_PATH: PointerChain<*mut i8> = PointerChain::new(&[0x14062d778]);
+
+pub static mut RNG_SEED: PointerChain<*mut u32> = PointerChain::new(&[0x14062d0b0]);
 
 // ------------------------------------------------------------------------------------
 //                                 OUR OVERRIDES
@@ -612,6 +618,11 @@ fn panel_click_check(
     ret
 }
 
+// This hook is a little cheaty but it fixes door rng so whatever
+fn get_random_float_within_range(_seed: *mut u32, min: f32, max: f32) -> f32 {
+    rand::thread_rng().gen::<f32>() * (max - min) + min
+}
+
 // ------------------------------------------------------------------------------------
 //                                 ACTUAL HOOKING
 // ------------------------------------------------------------------------------------
@@ -653,6 +664,7 @@ pub fn init_hooks() {
         WindowProcCallback     @ 0x14037aea0 -> window_proc_callback,
         SetCursorToPos         @ 0x140346580 -> set_cursor_to_pos,
         PanelClickCheck        @ 0x140231550 -> panel_click_check,
+        GetRandomFloatInRange  @ 0x1402f9a70 -> get_random_float_within_range,
         DoRestart              @ 0x1401f9e60 -> std::mem::transmute::<_, fn()>(placeholder),
         drawSphere             @ 0x1400761d0 -> std::mem::transmute::<_, fn(_,_,_,_)>(placeholder),
         CopyString             @ 0x1402e9490 -> std::mem::transmute::<_, fn(_) -> _>(placeholder),
@@ -693,6 +705,7 @@ pub fn enable_hooks() {
         WindowProcCallback,
         SetCursorToPos,
         PanelClickCheck,
+        GetRandomFloatInRange,
     );
 
     if !success {
@@ -717,6 +730,7 @@ pub fn disable_hooks() {
         WindowProcCallback,
         SetCursorToPos,
         PanelClickCheck,
+        GetRandomFloatInRange,
     );
 
     if !success {
