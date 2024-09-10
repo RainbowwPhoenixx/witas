@@ -5,6 +5,7 @@ use core::time;
 use tracing::{error, info};
 
 pub mod communication;
+pub mod gui;
 pub mod hooks;
 pub mod script;
 pub mod tas_player;

@@ -1,8 +1,9 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use eframe::{run_native, App};
-use egui::{Event, Ui};
+use egui::Ui;
 use witness_tas::communication::{client_thread, ControllerToTasMessage, TasToControllerMessage};
+use witness_tas::gui::widgets::scrollable_dragvalue;
 use witness_tas::tas_player::{PlaybackState, TraceDrawOptions, TraceInterval};
 
 #[derive(PartialEq)]
@@ -12,40 +13,6 @@ enum TasInterfaceTab {
     Config,
     About,
 }
-
-/// Create a DragValue with additionnal scroll interactions
-/// Press shift to midify 10x faster, and control for 100x. These stack.
-pub fn scrollable_dragvalue(value: &mut u32) -> impl egui::Widget + '_ {
-    move |ui: &mut egui::Ui| {
-        let mut dragvalue = ui.add(egui::DragValue::new(value));
-
-        let events = dragvalue.ctx.input(|i| i.events.clone());
-
-        if dragvalue.hovered() {
-            for event in events {
-                if let Event::MouseWheel {
-                    unit: _,
-                    delta,
-                    modifiers,
-                } = event
-                {
-                    let mut multiplier = 1;
-                    if modifiers.shift {
-                        multiplier *= 10;
-                    }
-                    if modifiers.ctrl {
-                        multiplier *= 100;
-                    }
-    
-                    *value = value.saturating_add_signed(multiplier * delta.y as i32);
-                    dragvalue.mark_changed();
-                }
-            }
-        }
-
-        dragvalue
-    }
- }
 
 struct TasInterface {
     // Communication with the tas player
@@ -357,10 +324,7 @@ impl TasInterface {
             }
         });
 
-        ui.horizontal(|ui| {
-            ui.heading("Display");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {})
-        });
+        ui.heading("Display");
         ui.horizontal(|ui| {
             egui::ComboBox::from_label("")
                 .selected_text(format!(
@@ -477,7 +441,10 @@ impl TasInterface {
                 .unwrap();
         }
     }
+
+    /// Draw the config TAB
     fn config_tab(&mut self, ui: &mut Ui) {
+        // TODO before this: refactor messages and server/client state of the other
         ui.label("Under Construction");
     }
 
@@ -495,7 +462,6 @@ impl TasInterface {
                 env!("CARGO_PKG_VERSION"),
                 env!("GIT_HASH")
             ));
-            ui.centered_and_justified(|ui| {});
         });
     }
 }

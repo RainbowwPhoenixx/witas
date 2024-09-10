@@ -122,7 +122,7 @@ static_detour! {
     static HandleAllMessages: unsafe extern "win64" fn(usize, u64);
     static HandleMessage: unsafe extern "win64" fn(usize, *const MSG) -> u64;
     static DeclareConsoleCommands: unsafe extern "win64" fn();
-    static DeclareConsoleCommand: unsafe extern "win64" fn(usize, usize, usize, u32, u32);
+    static DeclareConsoleCommand: unsafe extern "win64" fn(usize, usize, *mut i8, u32, u32);
     static HandleKeyboardInput: unsafe extern "win64" fn(usize, u8, u8, u8, u32, u32) -> u64;
 
     // Used by the game to check key presses
@@ -140,6 +140,7 @@ static_detour! {
     // Drawing stuff
     static drawScreen: unsafe extern "win64" fn();
     static drawSphere: unsafe extern "win64" fn(*const Vec3, f32, Color<f32>, bool);
+    static drawCylinder: unsafe extern "win64" fn(*const Vec3, *const Vec3, f32, Color<f32>, u32);
     static MiddleOfDrawing: unsafe extern "win64" fn(usize, usize);
 
     static SetCursorToPos: unsafe extern "win64" fn(u64, u32, u32);
@@ -361,7 +362,7 @@ fn declare_console_commands() {
     unsafe { DeclareConsoleCommands.call() }
 }
 
-fn declare_console_command(this: usize, func: usize, name: usize, arg_type: u32, arg_count: u32) {
+fn declare_console_command(this: usize, func: usize, name: *mut i8, arg_type: u32, arg_count: u32) {
     let name_str = String::from_utf8_lossy(unsafe { CStr::from_ptr(name as *const i8) }.to_bytes());
     info!("declare_console_command: {name_str}");
     unsafe { DeclareConsoleCommand.call(this, func, name, arg_type, arg_count) }
@@ -577,7 +578,7 @@ fn panel_click_check(
 
     let new_unlocked_panels_count = unsafe { *this };
 
-    if unsafe { UNLOCKED_COUNT } < new_unlocked_panels_count {
+    if unsafe { UNLOCKED_COUNT } != new_unlocked_panels_count {
         unsafe { UNLOCKED_COUNT = new_unlocked_panels_count };
         unsafe {
             if let Ok(mut tas_player) = TAS_PLAYER.lock() {
@@ -667,6 +668,7 @@ pub fn init_hooks() {
         GetRandomFloatInRange  @ 0x1402f9a70 -> get_random_float_within_range,
         DoRestart              @ 0x1401f9e60 -> std::mem::transmute::<_, fn()>(placeholder),
         drawSphere             @ 0x1400761d0 -> std::mem::transmute::<_, fn(_,_,_,_)>(placeholder),
+        drawCylinder           @ 0x1401c9b40 -> std::mem::transmute::<_, fn(_,_,_,_,_)>(placeholder),
         CopyString             @ 0x1402e9490 -> std::mem::transmute::<_, fn(_) -> _>(placeholder),
     );
 
