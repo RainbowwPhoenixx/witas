@@ -4,6 +4,7 @@ use eframe::{run_native, App};
 use egui::Ui;
 use witness_tas::communication::{client_thread, ControllerToTasMessage, TasToControllerMessage};
 use witness_tas::gui::widgets::scrollable_dragvalue;
+use witness_tas::platform::try_inject;
 use witness_tas::tas_player::{PlaybackState, TraceDrawOptions, TraceInterval};
 
 #[derive(PartialEq)]
@@ -121,7 +122,13 @@ impl App for TasInterface {
                 ui.label(
                     "Failed to connect to The Witness! Open the game and press the button below.",
                 );
-                if ui.button("Connect").clicked() {
+                let text = if cfg!(windows) {
+                    "Inject & Connect"
+                } else {
+                    "Connect"
+                };
+                if ui.button(text).clicked() {
+                    try_inject();
                     self.connect();
                 }
                 ui.separator();

@@ -35,3 +35,6 @@ features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input",
 ]
+
+[target.'cfg(windows)'.dependencies]
+dll-syringe = "0.15.2"

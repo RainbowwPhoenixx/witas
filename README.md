@@ -26,9 +26,10 @@
 - Start the game and the GUI, you should be good to go
 
 ### Windows
-VERY IMPORTANT NOTE: These are untested.
-- Inject witness_tas.dll into The Witness using any injector tool.
-- Start the GUI, shou should be good to go
+- Build the project
+- Put the executable (`witness_tas_controller.exe`) and the library (`witness_tas.dll`) in the same directory
+- Start the game and the executable
+- Click on "Inject & Connect" in the GUI
 
 ### Basic usage
 - Create a folder called "tas" in the game folder, you can place your tas scripts in there

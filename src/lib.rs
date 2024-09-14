@@ -11,10 +11,23 @@ pub mod script;
 pub mod tas_player;
 pub mod witness;
 
+pub mod platform;
+
 #[ctor::ctor]
 fn main() {
+    // This is like this on linux to avoid hooking the wine/proton/steam
+    // processes that wrap the actual game
+    #[cfg(unix)]
     if let Some(arg) = std::env::args().nth(1) {
         if arg == "witness64_d3d11.exe" {
+            std::thread::spawn(setup);
+        }
+    }
+
+    // don't run on the controller
+    #[cfg(windows)]
+    if let Some(arg) = std::env::args().nth(0) {
+        if !arg.contains("controller") {
             std::thread::spawn(setup);
         }
     }
