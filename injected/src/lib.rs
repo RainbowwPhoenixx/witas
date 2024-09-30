@@ -2,16 +2,14 @@
 
 use core::time;
 
+use common::communication;
+use common::script;
+use common::witness;
 use tracing::{error, info};
 
-pub mod communication;
-pub mod gui;
 pub mod hooks;
-pub mod script;
 pub mod tas_player;
-pub mod witness;
 
-pub mod platform;
 
 #[ctor::ctor]
 fn main() {

@@ -2,10 +2,14 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 use eframe::{run_native, App};
 use egui::Ui;
-use witness_tas::communication::{client_thread, ControllerToTasMessage, TasToControllerMessage};
-use witness_tas::gui::widgets::scrollable_dragvalue;
-use witness_tas::platform::try_inject;
-use witness_tas::tas_player::{PlaybackState, TraceDrawOptions, TraceInterval};
+use common::communication::{client_thread, ControllerToTasMessage, TasToControllerMessage};
+use common::tas::{PlaybackState, TraceDrawOptions, TraceInterval};
+
+mod platform;
+use platform::try_inject;
+
+mod widgets;
+use widgets::scrollable_dragvalue;
 
 #[derive(PartialEq)]
 enum TasInterfaceTab {
@@ -122,12 +126,7 @@ impl App for TasInterface {
                 ui.label(
                     "Failed to connect to The Witness! Open the game and press the button below.",
                 );
-                let text = if cfg!(windows) {
-                    "Inject & Connect"
-                } else {
-                    "Connect"
-                };
-                if ui.button(text).clicked() {
+                if ui.button("Inject & Connect").clicked() {
                     try_inject();
                     self.connect();
                 }

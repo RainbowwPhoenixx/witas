@@ -1,0 +1,26 @@
+[package]
+name = "injected"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+common = { path  = "../common" }
+rand = "0.8.5"
+retour = { version = "0.3", features = ["static-detour"] }
+ctor = "0.2.8"
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+tracing-appender = "0.2.3"
+region = "3.0.2"
+
+
+[dependencies.windows]
+version = "0.56.0"
+features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input",
+]

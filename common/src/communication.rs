@@ -5,7 +5,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::tas_player::{PlaybackState, TraceDrawOptions};
+use crate::tas::{PlaybackState, TraceDrawOptions};
 
 #[derive(Serialize, Deserialize)]
 pub enum ControllerToTasMessage {

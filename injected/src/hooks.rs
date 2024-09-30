@@ -1,3 +1,4 @@
+use common::tas::PlaybackState;
 use rand::Rng;
 use retour::static_detour;
 use std::ptr::addr_of;
@@ -7,7 +8,7 @@ use tracing::{debug, error, info};
 use windows::Win32::UI::WindowsAndMessaging::MSG;
 use windows::Win32::{Foundation::POINT, UI::Input::RAWINPUT};
 
-use crate::tas_player::{PlaybackState, TAS_PLAYER};
+use crate::tas_player::TAS_PLAYER;
 use crate::witness::windows_types::{Message, VirtualKeyCode};
 use crate::witness::witness_types::{Color, Entity, Vec2, Vec3};
 

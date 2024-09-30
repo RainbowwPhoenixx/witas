@@ -64,6 +64,8 @@ The injected library produces a log file called witness_tas.log to help troubles
     - WorldToScreen function?
     - drawing debug stuff
     - HOW CLICK PUZZLES WHILE MOVING
+- stop the tas when pressing escape
+- so injection on linux
 
 # Contributing
 The project is open to contributions. Here's a brief rundown of how it works.
