@@ -177,7 +177,7 @@ static mut TABBED_OUT: bool = false;
 
 // Variables for save loading
 pub static mut SAVE_PATH: PointerChain<*mut i8> = PointerChain::new(&[0x14062d790]);
-pub static mut LOAD_SAVE_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d789]);
+pub static LOAD_SAVE_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d789]);
 pub static mut APPDATA_PATH: PointerChain<*mut i8> = PointerChain::new(&[0x14062d778]);
 
 pub static mut RNG_SEED: PointerChain<*mut u32> = PointerChain::new(&[0x14062d0b0]);
@@ -189,7 +189,7 @@ pub static mut RNG_SEED: PointerChain<*mut u32> = PointerChain::new(&[0x14062d0b
 // Anything in here will be executed at the beginning
 // of every iteration of the main loop
 fn execute_tas_inputs() {
-    let mut player = unsafe { TAS_PLAYER.lock().unwrap() };
+    let mut player = TAS_PLAYER.lock().unwrap();
     let input_sth1 = unsafe { PTR_INPUT_STH1.read() };
 
     match unsafe { (player.as_mut(), HANDLE_MSG_PARAM1) } {
@@ -325,7 +325,7 @@ fn handle_all_messages(this: usize, idk: u64) {
 
 fn handle_message(this: usize, message: *const MSG) -> u64 {
     // During tas playback, ignore all user messages
-    if let Ok(player) = unsafe { TAS_PLAYER.lock() } {
+    if let Ok(player) = TAS_PLAYER.lock() {
         if let Some(player) = player.as_ref() {
             if player.get_playback_state() != PlaybackState::Stopped {
                 return 0; // The game always returns 0 in this function, let's do the same
@@ -378,10 +378,8 @@ fn handle_keyboard_input(
     scan_code: u32,
 ) -> u64 {
     if virtual_keycode == VirtualKeyCode::P as u32 && press_down == 1 {
-        unsafe {
-            if let Some(tas_player) = TAS_PLAYER.lock().unwrap().as_mut() {
-                tas_player.start(None)
-            }
+        if let Some(tas_player) = TAS_PLAYER.lock().unwrap().as_mut() {
+            tas_player.start(None)
         }
     }
 
@@ -441,7 +439,7 @@ fn get_mouse_delta_pos(
     unsafe { GetMouseDeltaPos.call(input_thing, mouse_x_out, mouse_y_out, mwheel_out, idk) };
 
     // Override the values during tas replay
-    let mut player = match unsafe { TAS_PLAYER.lock() } {
+    let mut player = match TAS_PLAYER.lock() {
         Ok(player) => player,
         Err(_) => return,
     };
@@ -464,7 +462,7 @@ fn get_mouse_delta_pos(
 
 fn draw_override() {
     // Don't draw during skipping
-    if let Ok(player) = unsafe { TAS_PLAYER.lock() } {
+    if let Ok(player) = TAS_PLAYER.lock() {
         if let Some(player) = player.as_ref() {
             if player.should_do_skipping() {
                 return;
@@ -479,7 +477,7 @@ fn draw_override() {
     }
 
     // Do the frame by frame
-    if let Ok(mut player) = unsafe { TAS_PLAYER.lock() } {
+    if let Ok(mut player) = TAS_PLAYER.lock() {
         if let Some(player) = player.as_mut() {
             if player.get_playback_state() == PlaybackState::Paused {
                 player.block_until_next_frame();
@@ -585,12 +583,10 @@ fn panel_click_check(
 
     if unsafe { UNLOCKED_COUNT } != new_unlocked_panels_count {
         unsafe { UNLOCKED_COUNT = new_unlocked_panels_count };
-        unsafe {
-            if let Ok(mut tas_player) = TAS_PLAYER.lock() {
-                if let Some(player) = tas_player.as_mut() {
-                    if player.get_playback_state() != PlaybackState::Stopped {
-                        player.send_puzzle_unlock();
-                    }
+        if let Ok(mut tas_player) = TAS_PLAYER.lock() {
+            if let Some(player) = tas_player.as_mut() {
+                if player.get_playback_state() != PlaybackState::Stopped {
+                    player.send_puzzle_unlock();
                 }
             }
         }

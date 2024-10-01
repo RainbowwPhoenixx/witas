@@ -352,10 +352,7 @@ impl TasInterface {
         ui.heading("Display");
         ui.horizontal(|ui| {
             egui::ComboBox::from_label("")
-                .selected_text(format!(
-                    "{}",
-                    self.trace_display_opts.interval.variant_name_simple()
-                ))
+                .selected_text(self.trace_display_opts.interval.variant_name_simple().to_string())
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut self.trace_display_opts.interval,

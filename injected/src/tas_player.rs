@@ -61,7 +61,7 @@ pub struct TasPlayer {
 impl TasPlayer {
     /// Inits the global
     pub fn init() {
-        let mut tas_player = unsafe { TAS_PLAYER.lock().unwrap() };
+        let mut tas_player = TAS_PLAYER.lock().unwrap();
 
         if tas_player.is_none() {
             *tas_player = Some(Self::new());
@@ -288,12 +288,14 @@ impl TasPlayer {
                 }
 
                 // Execute the tools
-                for tool in &next_line.tools {
-                    match tool {
-                        script::Tool::SetPos { pos, ang } => unsafe {
-                            PLAYER_POS.write(*pos);
-                            PLAYER_ANG.write(*ang);
-                        },
+                if let Some(tools) = &next_line.tools {
+                    for tool in tools {
+                        match tool {
+                            script::Tool::SetPos { pos, ang } => unsafe {
+                                PLAYER_POS.write(*pos);
+                                PLAYER_ANG.write(*ang);
+                            },
+                        }
                     }
                 }
             }
@@ -413,7 +415,7 @@ impl Playertrace {
     pub fn get_pos_to_show(&self) -> &[TraceTick] {
         let range = self.get_interval();
 
-        if range.len() == 0 {
+        if range.is_empty() {
             return &[];
         }
         &self.ticks[range]

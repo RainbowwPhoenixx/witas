@@ -25,7 +25,7 @@ pub struct ScriptLine {
     pub tick: u32,
     pub keys: Vec<char>,
     pub mouse: Option<(i32, i32)>,
-    pub tools: Option<Tool>,
+    pub tools: Option<Vec<Tool>>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,9 +111,15 @@ impl Script {
                 },
             });
 
+        let tool = padding_no_newline
+            .ignore_then(setpos_tool) // .or(other tool)
+            .then_ignore(padding_no_newline);
+
+        let tools_list = padding_no_newline.ignore_then(tool.separated_by(just(";")));
+
         let tools_part = just('|')
             .ignore_then(padding_no_newline)
-            .ignore_then(setpos_tool.or_not())
+            .ignore_then(tools_list.or_not())
             .or_not()
             .map(|c| c.flatten());
 
