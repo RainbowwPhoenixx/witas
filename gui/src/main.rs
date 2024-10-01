@@ -494,6 +494,7 @@ impl TasInterface {
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 340.0]),
+        follow_system_theme: false,
         ..Default::default()
     };
 

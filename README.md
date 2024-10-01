@@ -21,13 +21,12 @@
 ## Setting it up, usage and debugging
 ### Linux
 - Build the project
-- Copy libwitness_tas.so to the game folder
-- Change the steam launch command to be `LD_PRELOAD="libwitness_tas.so" %command%`
+- Copy libinjected.so to the game folder
+- Change the steam launch command to be `LD_PRELOAD="libinjected.so" %command%`
 - Start the game and the GUI, you should be good to go
 
 ### Windows
 - Build the project
-- Put the executable (`witness_tas_controller.exe`) and the library (`witness_tas.dll`) in the same directory
 - Start the game and the executable
 - Click on "Inject & Connect" in the GUI
 

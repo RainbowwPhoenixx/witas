@@ -4,21 +4,20 @@
 #[cfg_attr(target_os = "windows", path = "windows.rs")]
 mod os;
 
-use std::path::PathBuf;
-
 pub use os::*;
 
-// unused: this is used only on windows
-#[allow(unused)]
-fn get_library_path() -> PathBuf {
-    // TODO: make this include the dll bytes and write the dll/so to a file
-    // before injection
-    let base_path = PathBuf::from(env!("OUT_DIR"));
+// unused: this is used only on windows (for now)
+#[cfg(windows)]
+fn get_library_path() -> std::path::PathBuf {
+    use std::fs;
 
-    #[cfg(windows)]
-    let lib_name = "witness_tas.dll";
-    #[cfg(unix)]
-    let lib_name = "witness_tas.so";
+    // Contents of the dll to inject
+    let lib_inject = include_bytes!(env!("CARGO_CDYLIB_FILE_INJECTED"));
 
-    base_path.join(lib_name)
+    // Write file to temp dir
+    let mut file_path = std::env::temp_dir();
+    file_path.push("witness_tas.dll");
+    let _ = fs::write(file_path.clone(), lib_inject);
+
+    file_path
 }
