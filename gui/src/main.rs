@@ -3,7 +3,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use eframe::{run_native, App};
 use egui::Ui;
 use common::communication::{client_thread, ControllerToTasMessage, TasToControllerMessage};
-use common::tas::{PlaybackState, TraceDrawOptions, TraceInterval};
+use common::tas::{to_time, PlaybackState, TraceDrawOptions, TraceInterval};
 
 mod platform;
 use platform::try_inject;
@@ -178,7 +178,7 @@ impl TasInterface {
                 self.player_ang.0, self.player_ang.1
             ))
             .on_hover_text("Click to put exact angles into clipboard");
-        ui.label(format!("Current tick: {}", self.current_tick));
+        ui.label(format!("Current tick: {} ({})", self.current_tick, to_time(self.current_tick)));
 
         ui.label(format!(
             "Latest puzzle unlock: {}",

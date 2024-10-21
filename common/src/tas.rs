@@ -53,3 +53,11 @@ impl Default for TraceDrawOptions {
         }
     }
 }
+
+pub fn to_time(ticks: u32) -> String {
+    let total_secs = ticks as f32 / 60.0;
+    let mins = (total_secs / 60.0).floor() as u32;
+    let secs = total_secs - (mins * 60) as f32;
+
+    format!("{mins}m{secs:5.2}s")
+}
