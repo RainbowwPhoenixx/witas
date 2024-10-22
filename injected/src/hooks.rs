@@ -2,6 +2,7 @@ use common::tas::PlaybackState;
 use rand::Rng;
 use retour::static_detour;
 use std::ptr::addr_of;
+use std::sync::{LazyLock, Mutex};
 use std::time;
 use std::{ffi::CStr, marker::PhantomData};
 use tracing::{debug, error, info};
@@ -11,6 +12,11 @@ use windows::Win32::{Foundation::POINT, UI::Input::RAWINPUT};
 use crate::tas_player::TAS_PLAYER;
 use crate::witness::windows_types::{Message, VirtualKeyCode};
 use crate::witness::witness_types::{Color, Entity, Vec2, Vec3};
+
+// this is not 1/60 because of historical reasons, and the
+// change in the last digits makes the older tasses desync
+// but it's fine, it's no use crying over insignificant digits
+const FRAMETIME: f64 = 0.0166666666;
 
 /// Inits a list of hooks.
 ///
@@ -160,7 +166,7 @@ static mut HANDLE_MSG_PARAM1: Option<usize> = None;
 pub static MAIN_LOOP_COUNT: PointerChain<u32> = PointerChain::new(&[0x14062d5c8]);
 pub static NEW_GAME_FLAG: PointerChain<bool> = PointerChain::new(&[0x14062d076]);
 pub static DEBUG_SHOW_EPS: PointerChain<bool> = PointerChain::new(&[0x140630410]);
-pub static FRAMETIME: PointerChain<f64> = PointerChain::new(&[0x1406211d8]);
+pub static GAME_FRAMETIME: PointerChain<f64> = PointerChain::new(&[0x1406211d8]);
 pub static PLAYER: PointerChain<Entity> = PointerChain::new(&[0x14062d0a0, 0x18, 0x1E465 * 8, 0x0]);
 pub static NOCLIP: PointerChain<bool> = PointerChain::new(&[0x14062d5b8]);
 pub static PLAYER_POS: PointerChain<Vec3> =
@@ -461,6 +467,8 @@ fn get_mouse_delta_pos(
 }
 
 fn draw_override() {
+    static LAST_DRAW_CALL: LazyLock<Mutex<time::Instant>> = std::sync::LazyLock::new(|| Mutex::new(time::Instant::now()));
+
     // Don't draw during skipping
     if let Ok(player) = TAS_PLAYER.lock() {
         if let Some(player) = player.as_ref() {
@@ -469,8 +477,6 @@ fn draw_override() {
             }
         }
     };
-
-    let before_draw = time::Instant::now();
 
     unsafe {
         drawScreen.call();
@@ -486,8 +492,11 @@ fn draw_override() {
     };
 
     // Do the vsync ourselves, makes lag less bad
-    let remaining = 16u64.saturating_sub(before_draw.elapsed().as_millis() as u64);
-    std::thread::sleep(time::Duration::from_millis(remaining))
+    let elapsed = LAST_DRAW_CALL.lock().unwrap().elapsed().as_secs_f64();
+    let remaining = (FRAMETIME - elapsed).max(0.0);
+    std::thread::sleep(time::Duration::from_secs_f64(remaining));
+
+    *LAST_DRAW_CALL.lock().unwrap() = time::Instant::now();
 }
 
 fn middle_of_drawing(param1: usize, param2: usize) {
@@ -683,7 +692,7 @@ pub fn init_hooks() {
             region::Protection::READ_WRITE_EXECUTE,
         );
         std::ptr::copy_nonoverlapping(nops.as_ptr(), frametime_set_addr as *mut u8, 5);
-        FRAMETIME.write(0.0166666666);
+        GAME_FRAMETIME.write(FRAMETIME);
     }
 
     if !success {
