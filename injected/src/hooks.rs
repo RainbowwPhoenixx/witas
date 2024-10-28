@@ -330,15 +330,6 @@ fn handle_all_messages(this: usize, idk: u64) {
 }
 
 fn handle_message(this: usize, message: *const MSG) -> u64 {
-    // During tas playback, ignore all user messages
-    if let Ok(player) = TAS_PLAYER.lock() {
-        if let Some(player) = player.as_ref() {
-            if player.get_playback_state() != PlaybackState::Stopped {
-                return 0; // The game always returns 0 in this function, let's do the same
-            }
-        }
-    };
-
     let val = unsafe { *message }.message;
 
     match Message::try_from(val) {
@@ -383,6 +374,12 @@ fn handle_keyboard_input(
     virtual_keycode: u32,
     scan_code: u32,
 ) -> u64 {
+    if virtual_keycode == VirtualKeyCode::ESC as u32 && press_down == 1 {
+        if let Some(tas_player) = TAS_PLAYER.lock().unwrap().as_mut() {
+            tas_player.stop();
+        }
+    }
+
     if virtual_keycode == VirtualKeyCode::P as u32 && press_down == 1 {
         if let Some(tas_player) = TAS_PLAYER.lock().unwrap().as_mut() {
             tas_player.start(None)
@@ -412,6 +409,17 @@ fn handle_keyboard_input(
     if virtual_keycode == VirtualKeyCode::E as u32 && press_down == 1 {
         unsafe { DEBUG_SHOW_EPS.write(!DEBUG_SHOW_EPS.read()) }
     }
+
+
+    // During tas playback, ignore all messages that do not interest us
+    if let Ok(player) = TAS_PLAYER.lock() {
+        if let Some(player) = player.as_ref() {
+            if player.get_playback_state() != PlaybackState::Stopped {
+                // The function we are replacing almost always returns 1, so let's do that
+                return 1;
+            }
+        }
+    };
 
     unsafe {
         HandleKeyboardInput.call(

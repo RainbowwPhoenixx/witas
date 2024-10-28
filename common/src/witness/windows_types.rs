@@ -59,6 +59,7 @@ back_to_enum! {
         LButton = 0x01,
         RButton = 0x02,
 
+        ESC = 0x1B,
         Space = 0x20,
 
         // Numbers
