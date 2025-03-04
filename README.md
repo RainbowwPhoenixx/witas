@@ -11,7 +11,7 @@
 
 ### Additionnal features
 - During TAS playback, the player position is recorded and the displayed physically in the world with little spheres
-- Disables game slowing down when alt-tabbing so you can actually use the GUI without messing up the playback (wonky on windows)
+- Disables game slowing down when alt-tabbing so you can actually use the GUI without messing up the playback
 - Useful keybinds (only with the game focused):
     - P: quick tas replay
     - N: noclip toggle
@@ -40,7 +40,6 @@ These are the basic steps to get started. For a more detailed explanation, see [
 
 ### Troubleshooting
 The injected library produces a log file called witness_tas.log to help troubleshoot issues.
-
 
 ## Planned features
 - Savestates

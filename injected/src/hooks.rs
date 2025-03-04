@@ -149,7 +149,8 @@ static_detour! {
     static drawSphere: unsafe extern "win64" fn(*const Vec3, f32, Color<f32>, bool);
     static drawCylinder: unsafe extern "win64" fn(*const Vec3, *const Vec3, f32, Color<f32>, u32);
     static MiddleOfDrawing: unsafe extern "win64" fn(usize, usize);
-
+    
+    static ClipCursorToCenter: unsafe extern "win64" fn(u64, bool);
     static SetCursorToPos: unsafe extern "win64" fn(u64, u32, u32);
 
     static PanelClickCheck: unsafe extern "win64" fn(*const u32, *const Vec3, *const Vec3, *const f32, f32, bool, u8, u8) -> *const Entity;
@@ -350,7 +351,7 @@ fn handle_message(this: usize, message: *const MSG) -> u64 {
             Message::WM_RBUTTONDBCLK => {}
             _ => debug!("This message is recieved! {msg:#?}"),
         },
-        Err(_) => debug!("handle_message: unkown message {val}"),
+        Err(_) => {}
     }
 
     unsafe { HandleMessage.call(this, message) }
@@ -409,7 +410,6 @@ fn handle_keyboard_input(
     if virtual_keycode == VirtualKeyCode::E as u32 && press_down == 1 {
         unsafe { DEBUG_SHOW_EPS.write(!DEBUG_SHOW_EPS.read()) }
     }
-
 
     // During tas playback, ignore all messages that do not interest us
     if let Ok(player) = TAS_PLAYER.lock() {
@@ -475,7 +475,8 @@ fn get_mouse_delta_pos(
 }
 
 fn draw_override() {
-    static LAST_DRAW_CALL: LazyLock<Mutex<time::Instant>> = std::sync::LazyLock::new(|| Mutex::new(time::Instant::now()));
+    static LAST_DRAW_CALL: LazyLock<Mutex<time::Instant>> =
+        std::sync::LazyLock::new(|| Mutex::new(time::Instant::now()));
 
     // Don't draw during skipping
     if let Ok(player) = TAS_PLAYER.lock() {
@@ -572,6 +573,17 @@ fn window_proc_callback(idc: usize, msg: u32, wparam: u64, lparam: u64) -> usize
             WindowProcCallback.call(idc, msg, 1, lparam)
         },
         _ => unsafe { WindowProcCallback.call(idc, msg, wparam, lparam) },
+    }
+}
+
+fn clip_cursor_to_screen_center(idk_ptr: u64, center_cursor: bool) {
+    unsafe {
+        if TABBED_OUT {
+            debug!("here");
+            ClipCursorToCenter.call(idk_ptr, false);
+        } else {
+            ClipCursorToCenter.call(idk_ptr, center_cursor);
+        }
     }
 }
 
@@ -681,6 +693,7 @@ pub fn init_hooks() {
         drawScreen             @ 0x1401c8970 -> draw_override,
         MiddleOfDrawing        @ 0x140274b10 -> middle_of_drawing,
         WindowProcCallback     @ 0x14037aea0 -> window_proc_callback,
+        ClipCursorToCenter     @ 0x140344500 -> clip_cursor_to_screen_center,
         SetCursorToPos         @ 0x140346580 -> set_cursor_to_pos,
         PanelClickCheck        @ 0x140231550 -> panel_click_check,
         GetRandomFloatInRange  @ 0x1402f9a70 -> get_random_float_within_range,
@@ -723,6 +736,7 @@ pub fn enable_hooks() {
         drawScreen,
         MiddleOfDrawing,
         WindowProcCallback,
+        ClipCursorToCenter,
         SetCursorToPos,
         PanelClickCheck,
         GetRandomFloatInRange,
@@ -748,6 +762,7 @@ pub fn disable_hooks() {
         drawScreen,
         MiddleOfDrawing,
         WindowProcCallback,
+        ClipCursorToCenter,
         SetCursorToPos,
         PanelClickCheck,
         GetRandomFloatInRange,
