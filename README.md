@@ -11,7 +11,7 @@
 
 ### Additionnal features
 - During TAS playback, the player position is recorded and the displayed physically in the world with little spheres
-- Disables game slowing down when alt-tabbing so you can actually use the GUI without messing up the playback
+- Disables game slowing down when alt-tabbing so you can actually use the GUI without messing up the playback (wonky on windows)
 - Useful keybinds (only with the game focused):
     - P: quick tas replay
     - N: noclip toggle
@@ -30,7 +30,9 @@
 - Start the game and the executable
 - Click on "Inject & Connect" in the GUI
 
-### Basic usage
+### Quick start
+These are the basic steps to get started. For a more detailed explanation, see [the docs](doc/tool_usage.md)
+
 - Create a folder called "tas" in the game folder, you can place your tas scripts in there
 - Create a new file in the folder and start writing your tas
 - Play the TAS with the GUI (specify the correct filename!)
@@ -44,8 +46,7 @@ The injected library produces a log file called witness_tas.log to help troubles
 - Savestates
 - In my wildest dreams, we would also leverage pathfinding and automatic puzzle solving
 - Puzzle solving hud for snipes, to help you see what you're doing
-- Scan instead of adresses
-- Windows support, with automatic DLL injection when opening GUI
+- Use pattern scans instead of hard-coded adresses
 - More stuff for the GUI:
     - Config stuff:
         - TAS folder (currently forced to "game dir/tas")
@@ -53,7 +54,6 @@ The injected library produces a log file called witness_tas.log to help troubles
 - Freecam, to watch the TAS from any world point (useful to watch a panel while tasing a snipe)
 
 ## Todo
-- Document the script format
 - Automatically release buttons at the end
 - Handle resolution:
     - Make mouse movement independent of res?
@@ -62,8 +62,6 @@ The injected library produces a log file called witness_tas.log to help troubles
 - RE:
     - WorldToScreen function?
     - drawing debug stuff
-    - HOW CLICK PUZZLES WHILE MOVING
-- stop the tas when pressing escape
 - so injection on linux
 
 # Contributing
