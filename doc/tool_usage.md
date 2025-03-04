@@ -33,9 +33,6 @@ The tool also records attempts to click on a puzzle, and displays a little blue 
 
 Similar to the trace, you can adjust the click indicator's distance and size to fit the situation.
 
-### Config options
-The config options are still under construction
-
 ## Script format
 A script is split in two sections: the header and the actual inputs.
 

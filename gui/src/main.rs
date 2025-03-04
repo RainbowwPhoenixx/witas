@@ -143,7 +143,7 @@ impl App for TasInterface {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.current_tab, TasInterfaceTab::Playback, "Playback");
                 ui.selectable_value(&mut self.current_tab, TasInterfaceTab::Trace, "Trace");
-                ui.selectable_value(&mut self.current_tab, TasInterfaceTab::Config, "Config");
+                // ui.selectable_value(&mut self.current_tab, TasInterfaceTab::Config, "Config");
                 ui.selectable_value(&mut self.current_tab, TasInterfaceTab::About, "About");
             });
 
