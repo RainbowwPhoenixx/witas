@@ -29,7 +29,7 @@ impl TraceInterval {
 
 impl Default for TraceInterval {
     fn default() -> Self {
-        Self::Last(100)
+        Self::Last(0)
     }
 }
 
