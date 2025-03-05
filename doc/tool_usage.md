@@ -80,6 +80,7 @@ This field is used to press buttons, and therefore control clicks and movement. 
 - `L`/`l`: left
 - `R`/`r`: right
 - `S`/`s`: sprint
+- `E`/`e`: escape aka menu
 
 The only exception is left/right click to enter/leave focus mode and click on puzzles.
 - `P`: enter focus mode and click on puzzles (left click)

@@ -149,7 +149,7 @@ static_detour! {
     static drawSphere: unsafe extern "win64" fn(*const Vec3, f32, Color<f32>, bool);
     static drawCylinder: unsafe extern "win64" fn(*const Vec3, *const Vec3, f32, Color<f32>, u32);
     static MiddleOfDrawing: unsafe extern "win64" fn(usize, usize);
-    
+
     static ClipCursorToCenter: unsafe extern "win64" fn(u64, bool);
     static SetCursorToPos: unsafe extern "win64" fn(u64, u32, u32);
 
@@ -246,6 +246,13 @@ fn execute_tas_inputs() {
                 match (controller.current.running, controller.previous.running) {
                     (true, false) => press_down!(VirtualKeyCode::LShift),
                     (false, true) => press_up!(VirtualKeyCode::LShift),
+                    _ => 0,
+                };
+
+                // Menu
+                match (controller.current.running, controller.previous.running) {
+                    (true, false) => press_down!(VirtualKeyCode::ESC),
+                    (false, true) => press_up!(VirtualKeyCode::ESC),
                     _ => 0,
                 };
 

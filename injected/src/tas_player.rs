@@ -30,6 +30,7 @@ pub struct HalfControllerState {
     pub mouse_pos: (i32, i32),
     pub left_click: bool,
     pub right_click: bool,
+    pub escape: bool,
 }
 
 #[derive(Debug, Default)]
@@ -278,6 +279,10 @@ impl TasPlayer {
                         // Toggle puzzle
                         'P' => self.controller.current.left_click = true,
                         'p' => self.controller.current.right_click = true,
+
+                        // Menu
+                        'E' =>  {self.controller.current.escape = true}
+                        'e' =>  {self.controller.current.escape = false}
 
                         _ => {}
                     }

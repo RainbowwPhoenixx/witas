@@ -64,7 +64,7 @@ impl Script {
             .or_not()
             .then(text::int(10).map(|s: String| s.parse().unwrap()));
 
-        let key = one_of("UuDdLlRrSsPp");
+        let key = one_of("UuDdLlRrSsPpEe");
 
         let signed_int = just('-')
             .or_not()
