@@ -199,65 +199,53 @@ fn execute_tas_inputs() {
     let mut player = TAS_PLAYER.lock().unwrap();
     let input_sth1 = unsafe { PTR_INPUT_STH1.read() };
 
+    macro_rules! press_down {
+        ( $keycode: expr ) => {
+            press_down!($keycode, 0)
+        };
+        ( $keycode: expr, $scancode: expr ) => {
+            HandleKeyboardInput.call(input_sth1, 0, 0, 1, $keycode as u32, $scancode)
+        };
+    }
+
+    macro_rules! press_up {
+        ( $keycode: expr ) => {
+            press_up!($keycode, 0)
+        };
+        ( $keycode: expr, $scancode: expr ) => {
+            HandleKeyboardInput.call(input_sth1, 0, 0, 0, $keycode as u32, $scancode)
+        };
+    }
+
     match unsafe { (player.as_mut(), HANDLE_MSG_PARAM1) } {
         (Some(tas_player), Some(handle_message_this)) => unsafe {
             if let Some(controller) = tas_player.get_controller() {
                 // Movement
                 match (controller.current.forward, controller.previous.forward) {
-                    (true, false) => {
-                        HandleKeyboardInput.call(input_sth1, 0, 0, 1, VirtualKeyCode::W as u32, 0)
-                    }
-                    (false, true) => {
-                        HandleKeyboardInput.call(input_sth1, 0, 0, 0, VirtualKeyCode::W as u32, 0)
-                    }
+                    (true, false) => press_down!(VirtualKeyCode::W),
+                    (false, true) => press_up!(VirtualKeyCode::W),
                     _ => 0,
                 };
                 match (controller.current.backward, controller.previous.backward) {
-                    (true, false) => {
-                        HandleKeyboardInput.call(input_sth1, 0, 0, 1, VirtualKeyCode::S as u32, 0)
-                    }
-                    (false, true) => {
-                        HandleKeyboardInput.call(input_sth1, 0, 0, 0, VirtualKeyCode::S as u32, 0)
-                    }
+                    (true, false) => press_down!(VirtualKeyCode::S),
+                    (false, true) => press_up!(VirtualKeyCode::S),
                     _ => 0,
                 };
                 match (controller.current.left, controller.previous.left) {
-                    (true, false) => {
-                        HandleKeyboardInput.call(input_sth1, 0, 0, 1, VirtualKeyCode::A as u32, 0)
-                    }
-                    (false, true) => {
-                        HandleKeyboardInput.call(input_sth1, 0, 0, 0, VirtualKeyCode::A as u32, 0)
-                    }
+                    (true, false) => press_down!(VirtualKeyCode::A),
+                    (false, true) => press_up!(VirtualKeyCode::A),
                     _ => 0,
                 };
                 match (controller.current.right, controller.previous.right) {
-                    (true, false) => {
-                        HandleKeyboardInput.call(input_sth1, 0, 0, 1, VirtualKeyCode::D as u32, 0)
-                    }
-                    (false, true) => {
-                        HandleKeyboardInput.call(input_sth1, 0, 0, 0, VirtualKeyCode::D as u32, 0)
-                    }
+                    (true, false) => press_down!(VirtualKeyCode::D),
+                    (false, true) => press_up!(VirtualKeyCode::D),
                     _ => 0,
                 };
 
                 // Running
                 match (controller.current.running, controller.previous.running) {
-                    (true, false) => HandleKeyboardInput.call(
-                        input_sth1,
-                        0,
-                        0,
-                        1,
-                        VirtualKeyCode::LShift as u32,
-                        0,
-                    ),
-                    (false, true) => HandleKeyboardInput.call(
-                        input_sth1,
-                        0,
-                        0,
-                        0,
-                        VirtualKeyCode::LShift as u32,
-                        0,
-                    ),
+                    (true, false) => press_down!(VirtualKeyCode::LShift),
+                    (false, true) => press_up!(VirtualKeyCode::LShift),
                     _ => 0,
                 };
 
@@ -579,7 +567,6 @@ fn window_proc_callback(idc: usize, msg: u32, wparam: u64, lparam: u64) -> usize
 fn clip_cursor_to_screen_center(idk_ptr: u64, center_cursor: bool) {
     unsafe {
         if TABBED_OUT {
-            debug!("here");
             ClipCursorToCenter.call(idk_ptr, false);
         } else {
             ClipCursorToCenter.call(idk_ptr, center_cursor);
