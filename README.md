@@ -1,5 +1,7 @@
 # witas - The Witness tas tools
 
+![A screenshot of the TAS controller GUI](doc/controller.png)
+
 ## Features
 ### Central features
 - Playing a tas from a script input file
@@ -53,7 +55,6 @@ The injected library produces a log file called witness_tas.log to help troubles
 - Freecam, to watch the TAS from any world point (useful to watch a panel while tasing a snipe)
 
 ## Todo
-- Automatically release buttons at the end
 - Handle resolution:
     - Make mouse movement independent of res?
     - Make res a parameter of the script?
