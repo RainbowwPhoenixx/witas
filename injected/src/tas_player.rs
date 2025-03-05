@@ -19,7 +19,7 @@ use tracing::{error, info};
 
 pub static TAS_PLAYER: Mutex<Option<TasPlayer>> = Mutex::new(None);
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct HalfControllerState {
     pub forward: bool,
     pub backward: bool,
@@ -171,10 +171,12 @@ impl TasPlayer {
 
     /// Stops the TAS
     pub fn stop(&mut self) {
-        self.state = PlaybackState::Stopped;
-
-        let ticks = self.current_tick;
-        info!("Stopped TAS after {ticks} ticks.")
+        if self.state != PlaybackState::Stopped {
+            self.state = PlaybackState::Stopped;
+    
+            let ticks = self.current_tick;
+            info!("Stopped TAS after {ticks} ticks.")
+        }
     }
 
     /// Get the controller input and possibly advance state.
@@ -199,6 +201,13 @@ impl TasPlayer {
 
         // If we are not running, exit
         if self.state == PlaybackState::Stopped {
+            // Release all buttons if not done already
+            if self.controller.current != HalfControllerState::default() {
+                self.controller.previous = self.controller.current;
+                self.controller.current = HalfControllerState::default();
+                return Some(&self.controller)
+            }
+
             return None;
         }
 
